@@ -128,8 +128,8 @@ To install a provider we first need to have a .tf file declaring that provider. 
 ```conf
 provider "aws" {
     region = "eu-central-1"
-    access-key = "your-aws-access-key-id"
-    secret-key = "your-aws-secret-access-key"
+    access_key = "your-aws-access-key-id"
+    secret_key = "your-aws-secret-access-key"
 }
 ```
 
@@ -175,6 +175,146 @@ You find that block on the provider page by pressing the "USE PROVIDER" button a
 
 ### Providers Exposing Resources
 Providers provide access to the complete API of the related platform. You find a list of all available resources on the documentation page of the provider (on the left).
+
+</details>
+
+*****
+
+<details>
+<summary>Video: 4 - Resources & Data Sources</summary>
+<br />
+
+### Resources
+To create a resource we have to know its id. Resource ids start with the provider name followed by an underscore and the resource name, e.g. 'aws_vpc'.
+
+#### Examples
+```conf
+resource "aws_vpc" "my-test-vpc" {
+  cidr_block = "10.0.0.0/16"
+}
+```
+
+The second parameter (after the resource id) is a name we can give the resource to reference it from other parts of the configuration:
+```conf
+resource "aws_subnet" "my-test-subnet-1" {
+  vpc_id = aws_vpc.my-test-vpc.id
+  cidr_block = "10.0.10.0/24"
+  availability_zone = "eu-central-1a"
+}
+```
+
+#### Create the Declared Resources
+To create the resources declared in the main.tf file, we execute the following command from inside the folder containing the configuration file (`terraform` in our case):
+```sh
+terraform apply
+# Terraform used the selected providers to generate the following execution plan. Resource actions are indicated with the following symbols:
+#   + create
+# 
+# Terraform will perform the following actions:
+# 
+#   # aws_subnet.my-test-subnet-1 will be created
+#   + resource "aws_subnet" "my-test-subnet-1" {
+#       + arn                                            = (known after apply)
+#       + assign_ipv6_address_on_creation                = false
+#       + availability_zone                              = "eu-central-1a"
+#       + availability_zone_id                           = (known after apply)
+#       + cidr_block                                     = "10.0.10.0/24"
+#       + enable_dns64                                   = false
+#       + enable_resource_name_dns_a_record_on_launch    = false
+#       + enable_resource_name_dns_aaaa_record_on_launch = false
+#       + id                                             = (known after apply)
+#       + ipv6_cidr_block_association_id                 = (known after apply)
+#       + ipv6_native                                    = false
+#       + map_public_ip_on_launch                        = false
+#       + owner_id                                       = (known after apply)
+#       + private_dns_hostname_type_on_launch            = (known after apply)
+#       + tags_all                                       = (known after apply)
+#       + vpc_id                                         = (known after apply)
+#     }
+# 
+#   # aws_vpc.my-test-vpc will be created
+#   + resource "aws_vpc" "my-test-vpc" {
+#       + arn                                  = (known after apply)
+#       + cidr_block                           = "10.0.0.0/16"
+#       + default_network_acl_id               = (known after apply)
+#       + default_route_table_id               = (known after apply)
+#       + default_security_group_id            = (known after apply)
+#       + dhcp_options_id                      = (known after apply)
+#       + enable_classiclink                   = (known after apply)
+#       + enable_classiclink_dns_support       = (known after apply)
+#       + enable_dns_hostnames                 = (known after apply)
+#       + enable_dns_support                   = true
+#       + enable_network_address_usage_metrics = (known after apply)
+#       + id                                   = (known after apply)
+#       + instance_tenancy                     = "default"
+#       + ipv6_association_id                  = (known after apply)
+#       + ipv6_cidr_block                      = (known after apply)
+#       + ipv6_cidr_block_network_border_group = (known after apply)
+#       + main_route_table_id                  = (known after apply)
+#       + owner_id                             = (known after apply)
+#       + tags_all                             = (known after apply)
+#     }
+# 
+# Plan: 2 to add, 0 to change, 0 to destroy.
+# 
+# Do you want to perform these actions?
+#   Terraform will perform the actions described above.
+#   Only 'yes' will be accepted to approve.
+# 
+#   Enter a value: 
+```
+
+Enter `yes` to apply the plan.
+```sh
+#   Enter a value: yes
+# 
+# aws_vpc.my-test-vpc: Creating...
+# aws_vpc.my-test-vpc: Creation complete after 4s [id=vpc-0e78ddaf9fbd7667e]
+# aws_subnet.my-test-subnet-1: Creating...
+# aws_subnet.my-test-subnet-1: Creation complete after 0s [id=subnet-08b399d5808d62d36]
+# 
+# Apply complete! Resources: 2 added, 0 changed, 0 destroyed.
+```
+
+Going to your account in the AWS Management Console, you should find the created VPC and Subnet.
+
+### Data Sources
+`resources` lets you create new resources, whereas `data` lets you query existing resources.
+
+#### Examples
+```conf
+data "aws_vpc" "existing_default_vpc" {
+  default = true
+}
+```
+
+The second parameter (after the resource id) is a name (provided by us) under which the result of the query will be exported and with which it can be referenced from within other resource declarations.
+
+The arguments inside the block are the filter for the query. All the possible arguments are described on the Terraform documentation page for the provider (together with the resource documentation).
+
+Let's see how to reference data:
+```conf
+resource "aws_subnet" "my-test-subnet-2" {
+  vpc_id = data.aws_vpc.existing_default_vpc.id
+  cidr_block = "172.31.48.0/20"
+  availability_zone = "eu-central-1a"
+}
+```
+
+Apply the changes executing `terraform apply` again. This time terraform is refreshing the state before creating a plan:
+```conf
+terraform apply
+# data.aws_vpc.existing_default_vpc: Reading...
+# aws_vpc.my-test-vpc: Refreshing state... [id=vpc-0e78ddaf9fbd7667e]
+# data.aws_vpc.existing_default_vpc: Read complete after 1s [id=vpc-04acd8f40d2f4b8e9]
+# aws_subnet.my-test-subnet-1: Refreshing state... [id=subnet-08b399d5808d62d36]
+# ...
+# aws_subnet.my-test-subnet-2: Creating...
+# aws_subnet.my-test-subnet-2: Creation complete after 1s [id=subnet-0620ee24e8f6379e9]
+# 
+# Apply complete! Resources: 1 added, 0 changed, 0 destroyed.
+```
+
 
 </details>
 
