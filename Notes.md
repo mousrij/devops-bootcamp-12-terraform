@@ -587,7 +587,16 @@ Credentials should not be written hardcoded into a file which is checked in to s
 
 AWS credentials can be provided in two other ways than writing them into the configuration file. You can either set environment variables `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` or you can just add them to the file `~/.aws/credentials` (using `aws configure` for example). So setting the credentials for the provider can usually be done via environment variables or a provider specific way of configuring your local machine to authenticate against the provider. The details should be found in the documentation of each provider.
 
-### Define an use custom environment variables
+### Predefined Terraform Environment Variables
+Terraform has predefined environment variables, which you can use to change some of Terraform's default behavior, for example enabling detailed logs.
+```sh
+export TF_LOG=trace
+export TF_LOG=off
+```
+
+See [documentation](https://developer.hashicorp.com/terraform/cli/config/environment-variables).
+
+### Define and Use Custom Environment Variables
 Custom environment variables must have the prefix `TF_VAR_`. The remaining part of the name can be used to define a varibale in the configuration file like this:
 ```sh
 export TF_VAR_avail_zone="eu-central-1a"
@@ -605,6 +614,8 @@ resource "aws_subnet" "my-test-subnet-1" {
   }
 }
 ```
+
+This is technically the 4th way of setting a variable value, because we define a variable and set its value through a Terraform environment variable.
 
 </details>
 
