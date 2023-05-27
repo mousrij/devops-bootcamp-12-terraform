@@ -13,4 +13,4 @@ And finally it contains the following demo projects:
 - [Modularize Project](./demo-projects/2-modularize-project/)
 - [Terraform & AWS EKS](./demo-projects/3-terraform-and-aws-eks/)
 - [Configure a Shared Remote State](./demo-projects/4-configure-shared-remote-state/)
-- [Complete CI/CD with Terraform](./demo-projects/5-ci-ci-with-terraform/)
+- [Complete CI/CD with Terraform](./demo-projects/5-ci-cd-with-terraform/)
