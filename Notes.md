@@ -315,7 +315,267 @@ terraform apply
 # Apply complete! Resources: 1 added, 0 changed, 0 destroyed.
 ```
 
+</details>
+
+*****
+
+<details>
+<summary>Video: 5 - Change & Destroy Terraform Resources</summary>
+<br />
+
+### Changing Resources
+Let's add names to our VPC and subnets. On AWS resources this is done via tags. Tags can be any key-value-pairs. However there is one key reserved for resource names: `Name`.
+```conf
+resource "aws_vpc" "my-test-vpc" {
+  cidr_block = "10.0.0.0/16"
+  tags = {
+    Name: "test-vpc"
+  }
+}
+
+resource "aws_subnet" "my-test-subnet-1" {
+  vpc_id = aws_vpc.my-test-vpc.id
+  cidr_block = "10.0.10.0/24"
+  availability_zone = "eu-central-1a"
+  tags = {
+    Name: "test-subnet-1"
+  }
+}
+
+resource "aws_subnet" "my-test-subnet-2" {
+  vpc_id = data.aws_vpc.existing_default_vpc.id
+  cidr_block = "172.31.48.0/20"
+  availability_zone = "eu-central-1a"
+  tags = {
+    Name: "test-subnet-2"
+  }
+}
+```
+
+Apply the changes. Note that changes are displayed with a leading `~` (tilde) character:
+```sh
+#   # aws_subnet.my-test-subnet-1 will be updated in-place
+#   ~ resource "aws_subnet" "my-test-subnet-1" {
+#         id                                             = "subnet-08b399d5808d62d36"
+#       ~ tags                                           = {
+#           + "Name" = "test-subnet-1"
+#         }
+#       ~ tags_all                                       = {
+#           + "Name" = "test-subnet-1"
+#         }
+#         # (15 unchanged attributes hidden)
+#     }
+```
+
+In the same way attribues can be removed or modified. Removals are displayed with a leading `-` (minus) character.
+
+### Removing / Destroying Resources
+To remove a whole resource we can either remove it from the main.tf file and re-apply the file, or we can use a terrform command:
+```sh
+terraform destroy -target aws_subnet.my-test-subnet-2
+```
+
+When you destroy a resource using the command, you end up with a configuration file which is no longer representing the current state. That's why it is recommended to always modify and apply the configuration file instead of using the destroy command.
 
 </details>
 
 *****
+
+<details>
+<summary>Video: 6 - Terraform commands</summary>
+<br />
+
+### More Terraform Commands
+If you want to display the difference between the current state and the desired state (described in the current configuration file), you can execute the plan command. It gives you the same output as the `apply` command but without asking you whether you want to apply the changes (and without applying them, of course).
+```sh
+terraform plan
+```
+
+To apply changes without displaying the planned steps and without asking you for confirmation, execute
+```sh
+terraform apply -auto-approve
+```
+
+If you want to destroy all the resources declared in the configuration file, just execute
+```sh
+terraform destroy
+```
+
+Terraform will figure out the correct order in which the resources have to be destroyed.
+
+</details>
+
+*****
+
+<details>
+<summary>Video: 7 - Terraform State</summary>
+<br />
+
+### State
+Terraform stores the current state in a file called `terraform.tfstate` next to your configuration file(s). It is a JSON file where Terraform stores the state of your real world resources of your managed infrastructure.
+
+This file can quickly become quite large. Terraform provides commands to query the content of the state file.
+
+```sh
+terraform state list
+# data.aws_vpc.existing_default_vpc
+# aws_subnet.my-test-subnet-1
+# aws_subnet.my-test-subnet-2
+# aws_vpc.my-test-vpc
+
+terraform state show aws_subnet.my-test-subnet-1
+# # aws_subnet.my-test-subnet-1:
+# resource "aws_subnet" "my-test-subnet-1" {
+#     arn                                            = "arn:aws:ec2:eu-central-1:369076538622:subnet/subnet-08b399d5808d62d36"
+#     assign_ipv6_address_on_creation                = false
+#     availability_zone                              = "eu-central-1a"
+#     availability_zone_id                           = "euc1-az2"
+#     cidr_block                                     = "10.0.10.0/24"
+#     enable_dns64                                   = false
+#     enable_lni_at_device_index                     = 0
+#     enable_resource_name_dns_a_record_on_launch    = false
+#     enable_resource_name_dns_aaaa_record_on_launch = false
+#     id                                             = "subnet-08b399d5808d62d36"
+#     ipv6_native                                    = false
+#     map_customer_owned_ip_on_launch                = false
+#     map_public_ip_on_launch                        = false
+#     owner_id                                       = "369076538622"
+#     private_dns_hostname_type_on_launch            = "ip-name"
+#     tags                                           = {
+#         "Name" = "test-subnet-1"
+#     }
+#     tags_all                                       = {
+#         "Name" = "test-subnet-1"
+#     }
+#     vpc_id                                         = "vpc-0e78ddaf9fbd7667e"
+# }
+```
+
+The second command is useful when you want to see what attributes are available for a certain resource. 
+
+</details>
+
+*****
+
+<details>
+<summary>Video: 8 - Output Values</summary>
+<br />
+
+### Output
+Output values are like return values of functions. You can add them in your configuration files to output any values you are interested in.
+```conf
+output "test-vpc-id" {
+  value = aws_vpc.my-test-vpc.id
+}
+
+output "test-subnet-1-id" {
+  value = aws_subnet.my-test-subnet-1.id
+}
+```
+
+After the `output` keyword you provide a name of the output. The attribute `value` references the recource attribute you want to output.
+
+```sh
+terraform destroy -auto-approve
+terraform apply -auto-approve
+# ...
+# Apply complete! Resources: 3 added, 0 changed, 0 destroyed.
+# 
+# Outputs:
+# 
+# test-subnet-1-id = "subnet-09e36c91e8cf7dca1"
+# test-vpc-id = "vpc-0787a1e569414e86b"
+```
+
+</details>
+
+*****
+
+<details>
+<summary>Video: 9 - Variables in Terraform</summary>
+<br />
+
+Variables are defined and referenced as follows:
+```conf
+variable "subnet_cidr_block" {
+  description = "subnet cidr block"
+}
+
+resource "aws_subnet" "my-test-subnet-1" {
+  vpc_id = aws_vpc.my-test-vpc.id
+  cidr_block = var.subnet_cidr_block # <---
+  availability_zone = "eu-central-1a"
+  tags = {
+    Name: "test-subnet-1"
+  }
+}
+```
+
+There are three ways to pass a value to the input variable:
+- If you just execute `terraform apply` you will be prompted for entering a value for the variable `subnet_cidr_block`
+- You can pass in the variable value as an argument to the `terraform apply` command like this:
+  `terraform apply -var "subnet_cidr_block=10.0.30.0/24"`
+- You can create a file called `terraform.tfvars` containing all the variables and their values (in the format `variable_name = value`). When applying the main.tf configuration file, Terraform will automatically inspect the file called `terraform.tfvars` and substitute the variable references found in main.tf with the values found inside this file. Like this you can use the same main.tf file with different .tfvars files for different environments. In this case you would have to pass the name of the variables file to the `terraform apply` command like this:
+`terraform apply -var-file terraform-dev.tfvars`
+
+### Default Values
+Inside the `variables` block you can define a default value:
+```conf
+variable "subnet_cidr_block" {
+  description = "subnet cidr block"
+  default = "10.0.10.0/24"
+}
+```
+
+The default value kicks in if you don't pass in a value either via the `-var` option or a variables file.
+
+### Type constraints
+You can define a variable type using the `type` attribute within the `variable` block:
+```conf
+variable "subnet_cidr_block" {
+  description = "subnet cidr block"
+  type = string # number, boolean, list(<TYPE>), set(<TYPE>), map(<TYPE>), object({<ATTR_NAME> = <TYPE>, ...}), tuple([<TYPE>, ...])
+  default = "10.0.10.0/24"
+}
+```
+
+#### More complex example
+_main.tf_
+```conf
+variable "cidr_blocks" {
+  description = "cidr blocks for vpc and subnet"
+  type = list(object({
+    cidr_block = string
+    name = string
+  }))
+}
+
+resource "aws_vpc" "my-test-vpc" {
+  cidr_block = var.cidr_blocks[0].cidr_block
+  tags = {
+    Name: var.cidr_blocks[0].name
+  }
+}
+
+resource "aws_subnet" "my-test-subnet-1" {
+  vpc_id = aws_vpc.my-test-vpc.id
+  cidr_block = var.cidr_blocks[1].cidr_block
+  availability_zone = "eu-central-1a"
+  tags = {
+    Name: var.cidr_blocks[1].name
+  }
+}
+```
+
+_terraform.tfvars_
+```conf
+cidr_block = [
+  { cidr_block = "10.0.0.0/16", name = "test-vpc" },
+  { cidr_block = "10.0.10.0/24", name = "test-subnet-1" }
+]
+```
+
+</details>
+
+*****
+
