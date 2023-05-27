@@ -9,8 +9,6 @@ terraform {
 
 provider "aws" {
   region = "eu-central-1"
-  access_key = "your-aws-access-key-id"
-  secret_key = "your-aws-secret-access-key"
 }
 
 variable "vpc_cidr_block" {
@@ -20,6 +18,8 @@ variable "vpc_cidr_block" {
 variable "subnet_cidr_block" {
   description = "subnet cidr block"
 }
+
+variable "avail_zone" {}
 
 resource "aws_vpc" "my-test-vpc" {
   cidr_block = var.vpc_cidr_block
@@ -31,7 +31,7 @@ resource "aws_vpc" "my-test-vpc" {
 resource "aws_subnet" "my-test-subnet-1" {
   vpc_id = aws_vpc.my-test-vpc.id
   cidr_block = var.subnet_cidr_block
-  availability_zone = "eu-central-1a"
+  availability_zone = var.avail_zone
   tags = {
     Name: "test-subnet-1"
   }
@@ -44,7 +44,7 @@ data "aws_vpc" "existing_default_vpc" {
 resource "aws_subnet" "my-test-subnet-2" {
   vpc_id = data.aws_vpc.existing_default_vpc.id
   cidr_block = "172.31.48.0/20"
-  availability_zone = "eu-central-1a"
+  availability_zone = var.avail_zone
   tags = {
     Name: "test-subnet-2"
   }

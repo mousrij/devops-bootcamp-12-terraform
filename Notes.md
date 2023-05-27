@@ -579,3 +579,35 @@ cidr_block = [
 
 *****
 
+<details>
+<summary>Video: 10 - Environment Variables in Terraform</summary>
+<br />
+
+Credentials should not be written hardcoded into a file which is checked in to source control repository.
+
+AWS credentials can be provided in two other ways than writing them into the configuration file. You can either set environment variables `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` or you can just add them to the file `~/.aws/credentials` (using `aws configure` for example). So setting the credentials for the provider can usually be done via environment variables or a provider specific way of configuring your local machine to authenticate against the provider. The details should be found in the documentation of each provider.
+
+### Define an use custom environment variables
+Custom environment variables must have the prefix `TF_VAR_`. The remaining part of the name can be used to define a varibale in the configuration file like this:
+```sh
+export TF_VAR_avail_zone="eu-central-1a"
+```
+
+```conf
+variable "avail_zone" {} # <---
+
+resource "aws_subnet" "my-test-subnet-1" {
+  vpc_id = aws_vpc.my-test-vpc.id
+  cidr_block = var.subnet_cidr_block
+  availability_zone = var.avail_zone # <---
+  tags = {
+    Name: "test-subnet-1"
+  }
+}
+```
+
+</details>
+
+*****
+
+
