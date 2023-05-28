@@ -621,4 +621,20 @@ This is technically the 4th way of setting a variable value, because we define a
 
 *****
 
+<details>
+<summary>Video: 11 - Create Git Repository for local Terraform Project</summary>
+<br />
 
+Like your application code, Terraform scripts being infrastructure as code, should be managed by version control system Git and be hosted in a Git repository.
+
+Best Practice:
+- Have a separate Git repository for application code and Terraform code.
+
+When adding a Terraform project to a Git repository, the following folders and files don't have to be checked in and should be added to `.gitignore`:
+- the `.terraform` folder -> `**/.terraform/*`
+- the state file and its backup -> `*.tfstate` and `*.tfstate.*`
+- the variable files as they may contain sentitive data -> `*.tfvars`
+
+</details>
+
+*****
