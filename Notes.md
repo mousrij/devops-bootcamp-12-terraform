@@ -638,3 +638,260 @@ When adding a Terraform project to a Git repository, the following folders and f
 </details>
 
 *****
+
+<details>
+<summary>Video: 12 - Automate Provisioning EC2 with Terraform - Part 1</summary>
+<br />
+
+### Overview
+We're going to provision an EC2 instance on AWS infrastructure and then run an nginx Docker container on that EC2 instance. Using Terraform we're going to 
+- create a custom VPC
+- create a custom Subnet in one of the availability zones
+- create a Route Table & Internet Gateway
+- provision EC2 instance
+- deploy nginx Docker container
+- create a Security Group (firewall)
+
+A best practice when working with Terraform is to ceate the infrastructure from scratch and leave the defaults created by AWS as is. This makes it easier to clean up and remove all the components created by Terraform when you don't need them anymore. That's why we don't use the default VPC but create our own custom VPC.
+
+### Create a VPC and a Subnet
+Let's start with a `main.tf` file with the following content:
+
+_main.tf_
+```conf
+terraform {
+  required_providers {
+    aws = {
+      source = "hashicorp/aws"
+      version = "4.67.0"
+    }
+  }
+}
+
+provider "aws" {
+  region = "eu-central-1"
+}
+
+variable vpc_cidr_block {}
+variable subnet_cidr_block {}
+variable avail_zone {}
+variable env_prefix {} # <--- dev, stage, prod
+
+resource "aws_vpc" "myapp-vpc" {
+    cidr_block = var.vpc_cidr_block
+    tags = {
+        Name = "${var.env_prefix}-vpc" # <--- string interpolation
+    }
+}
+
+resource "aws_subnet" "myapp-subnet-1" {
+    vpc_id = aws_vpc.myapp-vpc.id
+    cidr_block = var.subnet_cidr_block
+    availability_zone = var.avail_zone
+    tags = {
+        Name = "${var.env_prefix}-subnet-1"
+    }
+}
+```
+
+Create a `terraform.tfvars` file setting the four variables:
+
+_terraform.tfvars_
+```conf
+vpc_cidr_block = "10.0.0.0/16"
+subnet_cidr_block = "10.0.10.0/24"
+avail_zone = "eu-central-1a"
+env_prefix = "dev"
+```
+
+Check what Terraform is going to do and if everything looks fine, apply the changes:
+```sh
+terraform plan
+terraform apply -auto-approve
+# ...
+# aws_vpc.myapp-vpc: Creating...
+# aws_vpc.myapp-vpc: Creation complete after 2s [id=vpc-09d8a5e6df029965c]
+# aws_subnet.myapp-subnet-1: Creating...
+# aws_subnet.myapp-subnet-1: Creation complete after 0s [id=subnet-049b7bc24b07a9ca7]
+# 
+# Apply complete! Resources: 2 added, 0 changed, 0 destroyed.
+```
+
+### Route Table & Internet Gateway
+Login to your AWS Management Console and navigate to the VPC dashboard. Click on the `dev-vpc` entry. In the `Details` section you see that AWS automatically generated a Route Table (a virtual router in our VPC, defining where the traffic will be forwarded to whithin the VPC). AWS also generated a Network ACL. An NACL is a firewall configuration for Subnets whereas a Security Group is a firewall configuration for servers. In NACLs every port is open by default. In security groups all the ports are closed by default.
+
+Click on the route table link in the VPC details section and again on the ID link of the route table. In the Routes section you see that the route table only contains one route entry handling the traffic for all the IP addresses in the VPC range (Destination = 10.0.0.0/16) but only locally (Target = local), i.e. only VPC-internal traffic. There's no internet gateway configured connecting the Internet with our VPC (Destination = 0.0.0.0/0, Target = igw).
+
+Following the best practice, we don't add a route to the route table automatically created by AWS, but we create a new Route Table containing the two entries we need. The entry concerning the traffic of the VPC IP range (with Target = local) is created for each route table and cannot be created manually (or by Terraform). So we only have to define an entry for the internet connectivity. Add the folloing resources to the main.tf file:
+
+```conf
+resource "aws_internet_gateway" "myapp-igw" {
+    vpc_id = aws_vpc.myapp-vpc.id
+    tags = {
+        Name = "${var.env_prefix}-igw"
+    }
+}
+
+resource "aws_route_table" "myapp-route-table" {
+    vpc_id = aws_vpc.myapp-vpc.id
+
+    route {
+        cidr_block = "0.0.0.0/0"
+        gateway_id = aws_internet_gateway.myapp-igw.id
+    }
+    tags = {
+        Name = "${var.env_prefix}-rtb"
+    }
+}
+```
+
+Check and apply the changes:
+```sh
+terraform plan
+terraform apply -auto-approve
+# aws_internet_gateway.myapp-igw: Creating...
+# aws_internet_gateway.myapp-igw: Creation complete after 0s [id=igw-0376d90b54fcef3ad]
+# aws_route_table.myapp-route-table: Creating...
+# aws_route_table.myapp-route-table: Creation complete after 1s [id=rtb-051c151beb22a9536]
+# 
+# Apply complete! Resources: 2 added, 0 changed, 0 destroyed.
+```
+
+Check the new route table and the internet gateway in the AWS Management Console.
+
+### Subnet Association with Route Table
+Currently our subnet is not yet associated with the route table we created via Terraform. Subnets that haven't been explicitly associated with a route table are assotiated by AWS with the main route table of the VPC, which is the one that was created by AWS automatically when we created the VPC. So we have to create a route table association now, because we want our subnet to be connected with the internet too. (Note that in the AWS Management Console it is called a 'subnet association', but the aws provider resource is called a 'route table association').
+
+Add the following content to the `main.tf` file and apply the changes:
+```conf
+resource "aws_route_table_association" "assoc-rtb-subnet" {
+  subnet_id      = aws_subnet.myapp-subnet-1.id
+  route_table_id = aws_route_table.myapp-route-table.id
+}
+```
+
+### Using the Main Route Table
+If we wanted to use the main route table automatically created by AWS and add the route providing internet connectivity to this route table (instead of creating our own route table), we could do that as well adding the following resource to the configuration:
+
+```conf
+resource "aws_default_route_table" "main-rtb" {
+    default_route_table_id = aws_vpc.myapp-vpc.default_route_table_id
+
+    route {
+        cidr_block = "0.0.0.0/0"
+        gateway_id = aws_internet_gateway.myapp-igw.id
+    }
+    tags = {
+        Name = "${var.env_prefix}-main-rtb"
+    }
+}
+```
+
+The attribute name 'default_route_table_id' can be found inspecting the VPC in the current state:
+```sh
+terraform state show aws_vpc.myapp-vpc
+# # aws_vpc.myapp-vpc:
+# resource "aws_vpc" "myapp-vpc" {
+#     arn                                  = "arn:aws:ec2:eu-central-1:369076538622:vpc/vpc-09d8a5e6df029965c"
+#     assign_generated_ipv6_cidr_block     = false
+#     cidr_block                           = "10.0.0.0/16"
+#     default_network_acl_id               = "acl-0d26c6c537ac824b1"
+#     default_route_table_id               = "rtb-0ee7bd1fb740d6ba3"
+#     default_security_group_id            = "sg-00e940c469d455b57"
+#     ...
+#     id                                   = "vpc-09d8a5e6df029965c"
+#     ...
+# }
+```
+
+When you apply these changes the existing main route table created by AWS is replaced by a new main route table with the same id but with the additional route.
+
+Note that this time we don't have to explicitly create a route-table-subnet-association between this new main route table and our subnet because subnets not explicitly associated with a route table get automatically associated with the main route table as mentioned above.
+
+### Security Group
+To configure firewall rules for the EC2 instance we want to create (open port 22 for ssh and port 8080 to access the nginx server), we need to create a security group.
+
+Add the folloing resource to the configuration file:
+
+```conf
+resource "aws_security_group" "myapp-sg" {
+  name   = "myapp-sg"
+  vpc_id = aws_vpc.myapp-vpc.id
+
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = [var.my_ip]
+  }
+
+  ingress {
+    from_port   = 8080
+    to_port     = 8080
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    from_port       = 0
+    to_port         = 0
+    protocol        = "-1"
+    cidr_blocks     = ["0.0.0.0/0"]
+    prefix_list_ids = []
+  }
+
+  tags = {
+    Name = "${var.env_prefix}-sg"
+  }
+}
+```
+
+The security group contains two ingress rules (controlling incomming traffic) and one egress rule (controlling outgoing traffic). We want to allow incoming ssh requests (on port 22) to be able to ssh into the EC2 instance, and http requests on port 8080 to be able to access the nginx server with our browser. And we want to allow any outgoing requests to be able to pull the nginx Docker image.
+The port declared in a firewall rule can actually be a port range, that's why we define a `port_from` and `port_to` value. The port 22 must only be open for requests from our IP address, so we don't write it directly into the configuration file but define a variable for it.
+
+Add `variable my_ip {}` to the list of variables in the configuration file and add an entry `my_ip = "nnn.nnn.nnn.nnn/32"` to the terraform.tfvars file (replace nnn.nnn.nnn.nnn with your IP address).
+
+Now check and apply the changes. Inspect the applied security group in the AWS Management Console (EC2 dashboard > Security Groups or VPC dashboard > Security Groups).
+
+### Using the Default Security Group
+As with the main routing table we can also reuse the default security group created by AWS when creating a VPC and add the ingress and egress rules instead of creating a new custom security group.
+
+To do so just take the resource definition of our custom security group, change the resource id to `aws_default_security_group`, remove the `name` attribute and adjust the tags if you want. The ingress and outgress definitions stay the same:
+
+```conf
+resource "aws_default_security_group" "default-sg" {
+    vpc_id = aws_vpc.myapp-vpc.id
+
+    ingress {
+        from_port = 22
+        to_port = 22
+        protocol = "tcp"
+        cidr_blocks = [var.my_ip]
+    }
+
+    ingress {
+        from_port = 8080
+        to_port = 8080
+        protocol = "tcp"
+        cidr_blocks = ["0.0.0.0/0"]
+    }
+
+    egress {
+        from_port = 0
+        to_port = 0
+        protocol = "-1"
+        cidr_blocks = ["0.0.0.0/0"]
+        prefix_list_ids = []
+    }
+
+    tags = {
+        Name = "${var.env_prefix}-default-sg"
+    }
+}
+```
+
+Again, when applying this resource definition, the original default security group gets replaced by a new one with the same id but with different rules.
+
+</details>
+
+*****
