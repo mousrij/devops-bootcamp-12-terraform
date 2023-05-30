@@ -895,3 +895,188 @@ Again, when applying this resource definition, the original default security gro
 </details>
 
 *****
+
+<details>
+<summary>Video: 13 - Automate Provisioning EC2 with Terraform - Part 2</summary>
+<br />
+
+Now let's create an EC2 instance.
+
+### Amazon Machine Image (AMI) for EC2
+First of all we need an Amazon Machine Image (AMI) which will be used as a template for the EC2 virtual machine. We could go to the AWS Management Console and look up the id of the AMI we want to use. But this id may change when Amazon updates the image. So instead of hardcoding it into the configuration file, we define a `data` querying the latest version of the image we want to use (the AMI name can be found in in EC2 > AMI Catalog > Community AMIs):
+
+```conf
+data "aws_ami" "latest-amazon-linux-image" {
+    most_recent = true
+    owners = ["amazon"]
+    filter {
+        name = "name"
+        values = ["amzn2-ami-kernel-5.10-hvm-*-x86_64-gp2"]
+    }
+    filter {
+        name = "virtualization-type"
+        values = ["hvm"]
+    }
+}
+```
+
+To test whether the `data` queries the expected AMI add the following `output` to the configuration:
+
+```conf
+output "aws_ami_id" {
+    value = data.aws_ami.latest-amazon-linux-image.id
+}
+```
+
+Execute `terraform plan` to se the output and compare it with the id displayed in the AWS Management Console.
+
+Now we can reference this `data` in the resource definition for the EC2 instance:
+
+```conf
+resource "aws_instance" "myapp-server" {
+    ami = data.aws_ami.latest-amazon-linux-image.id
+}
+```
+
+### Create EC2 Instance
+The second required attribute (besides `ami`) is the `instance_type`. We set it to `t2.micro` but don't write it hardcoded into the configuration file, but rather define a variable and add the value to the `terraform.tfvars` file:
+
+_main.tf_
+```conf
+variable instance_type {}
+...
+resource "aws_instance" "myapp-server" {
+    ami = data.aws_ami.latest-amazon-linux-image.id
+    instance_type = var.instance_type
+}
+```
+
+_terraform.tfvars_
+```conf
+...
+instance_type = "t2.micro"
+```
+
+All the other attributes are optional but we set some of them because we want the EC2 to be running in our VPC and use our security group and so on. The final resource definition will look like this:
+
+```conf
+resource "aws_instance" "myapp-server" {
+    ami = data.aws_ami.latest-amazon-linux-image.id
+    instance_type = var.instance_type
+
+    subnet_id = aws_subnet.myapp-subnet-1.id
+    vpc_security_group_ids = [aws_default_security_group.default-sg.id]
+    availability_zone = var.avail_zone
+
+    associate_public_ip_address = true
+    key_name = "server-key-pair"
+
+    tags = {
+        Name = "${var.env_prefix}-server"
+    }
+}
+```
+
+For being able to ssh into the EC2 instance we have to create a key pair. The name of the key pair is then set as the value of the attribute `key_name`.
+
+To create the key pair open the AWS Management Console, make sure you're in the right region, go to the EC2 dashboard and click on the 'Key pairs' link. Press the 'Create key pair' button, enter a key pair name (e.g. 'server-key-pair'), select the type (RSA or ED25519), a format (.pem) and press 'Create key pair'. A `server-key-pair.pem` file gets downloaded automatically.
+
+Move the downloaded file into the `~/.ssh` directory and reduce its file permissions to user-read-only:
+```sh
+mv ~/Downloads/server-key-pair.pem ~/.ssh/
+chmod 400 ~/.ssh/server-key-pair.pem
+```
+
+Apply the changes:
+```sh
+terraform plan
+terraform apply --auto-approve
+# ...
+# aws_instance.myapp-server: Creating...
+# aws_instance.myapp-server: Still creating... [10s elapsed]
+# aws_instance.myapp-server: Still creating... [20s elapsed]
+# aws_instance.myapp-server: Creation complete after 22s [id=i-0b063121922c765b6]
+```
+
+As soon as the EC2 instance state in the AWS Management Console is 'Running' we can ssh into the instance. Copy the public IP address from the 'Instance summary' page and execute the following command in your local machine's terminal:
+```sh
+ssh -i ~/.ssh/server-key-pair.pem ec2-user@<public-ip>
+```
+
+To get the public IP address directly when applying the configuration file, we can add the following `output` configuration:
+```conf
+output "ec2_public_ip" {
+    value = aws_instance.myapp-server.public_ip
+}
+```
+
+### Automate SSH Key Pair
+Creating the key pair was a manual step. We should try to automate as many steps as possible. So let's use an existing key pair we created on our local machine and copy the public key to the EC2 instance.
+
+Add the following content to the configuration file...
+
+_main.tf_
+```conf
+variable public_key_location {}
+...
+resource "aws_key_pair" "ssh-key" {
+    key_name = "server-key"
+    public_key = file(var.public_key_location)
+}
+```
+
+... and replace the key-pair reference in the `aws_instance` resource:
+
+_main.tf_
+```conf
+resource "aws_instance" "myapp-server" {
+    ...
+    key_name = aws_key_pair.ssh-key.key_name
+    ...
+}
+```
+
+Don't forget to set the `public_key_location` variable:
+
+_terraform.tfvars_
+```conf
+public_key_location = "/Users/fsiegrist/.ssh/id_ed25519.pub"
+```
+
+Apply the changes. Because it is not possible to replace the key pair in a running EC2 instance the existing instance is destroyed and a new one is created:
+
+```sh
+terraform apply --auto-approve
+# ...
+# aws_key_pair.ssh-key: Creating...
+# aws_instance.myapp-server: Destroying... [id=i-0b063121922c765b6]
+# aws_key_pair.ssh-key: Creation complete after 0s [id=server-key]
+# aws_instance.myapp-server: Still destroying... [id=i-0b063121922c765b6, 10s elapsed]
+# aws_instance.myapp-server: Still destroying... [id=i-0b063121922c765b6, 20s elapsed]
+# aws_instance.myapp-server: Still destroying... [id=i-0b063121922c765b6, 30s elapsed]
+# aws_instance.myapp-server: Destruction complete after 30s
+# aws_instance.myapp-server: Creating...
+# aws_instance.myapp-server: Still creating... [10s elapsed]
+# aws_instance.myapp-server: Still creating... [20s elapsed]
+# aws_instance.myapp-server: Still creating... [30s elapsed]
+# aws_instance.myapp-server: Creation complete after 32s [id=i-0994aec0c5300e204]
+# 
+# Apply complete! Resources: 2 added, 0 changed, 1 destroyed.
+# 
+# Outputs:
+# 
+# aws_ami_id = "ami-08e415170f52d1657"
+# ec2_public_ip = "3.72.36.170"
+```
+
+SSH into the new instance (the public IP address is at the bottom of the output of the apply command). Since we use our own private key stored at the default location we don't have to specify the path to the private key file:
+
+```sh
+ssh ec2-user@3.72.36.170
+```
+
+Finally you can delete the old server-key-pair manually in the AWS Management Console and remove the file `~/.ssh/server-key-pair.pem` from your local machine.
+
+</details>
+
+*****
