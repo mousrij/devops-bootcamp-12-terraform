@@ -1080,3 +1080,88 @@ Finally you can delete the old server-key-pair manually in the AWS Management Co
 </details>
 
 *****
+
+<details>
+<summary>Video: 14 - Automate Provisioning EC2 with Terraform - Part 3</summary>
+<br />
+
+### Run Entrypopint Script to start Docker Container
+By now we have a running EC2 instance but there is no application deployed on it. We want to automate the process of installing Docker and running a container too. In Terraform we have the possibility to define something like an entrypoint on an EC2 instance which is called as soon as the EC2 instance is up and running. The according attribute is called `user_data`.
+
+Add the following `user_data` block just before the `tags` attribute inside the `aws_instance` resource:
+
+_main.tf_
+```conf
+    user_data = <<EOF
+                    #!/bin/bash
+                    sudo yum update -y && sudo yum install -y docker
+                    sudo systemctl start docker
+                    sudo usermod -aG docker ec2-user
+                    docker run -p 8080:80 nginx
+                EOF
+```
+
+Apply the changes:
+```sh
+terraform apply
+# ...
+# aws_instance.myapp-server: Modifying... [id=i-0994aec0c5300e204]
+# aws_instance.myapp-server: Still modifying... [id=i-0994aec0c5300e204, 10s elapsed]
+# aws_instance.myapp-server: Still modifying... [id=i-0994aec0c5300e204, 20s elapsed]
+# aws_instance.myapp-server: Still modifying... [id=i-0994aec0c5300e204, 30s elapsed]
+# aws_instance.myapp-server: Still modifying... [id=i-0994aec0c5300e204, 40s elapsed]
+# aws_instance.myapp-server: Still modifying... [id=i-0994aec0c5300e204, 50s elapsed]
+# aws_instance.myapp-server: Still modifying... [id=i-0994aec0c5300e204, 1m0s elapsed]
+# aws_instance.myapp-server: Modifications complete after 1m1s [id=i-0994aec0c5300e204]
+# 
+# Apply complete! Resources: 0 added, 1 changed, 0 destroyed.
+# 
+# Outputs:
+# 
+# aws_ami_id = "ami-08e415170f52d1657"
+# ec2_public_ip = "3.67.138.246"
+```
+
+The server could be updated in-place. Open the browser and navigate to [http://3.67.138.246:8080](http://3.67.138.246:8080). You should see the nginx welcome page.
+
+You can also ssh into the EC2 instance and execute `docker ps` to see the nginx container:
+```sh
+ssh ec2-user@3.67.138.246
+docker ps
+# CONTAINER ID   IMAGE     COMMAND                  CREATED         STATUS         PORTS                                   NAMES
+# 30eafbc1406c   nginx     "/docker-entrypoint.…"   4 seconds ago   Up 3 seconds   0.0.0.0:8080->80/tcp, :::8080->80/tcp   laughing_spence
+```
+
+Note that the user_data script is executed just once when the EC2 instance was initialized. When you apply other changes that do not need to terminate the existing and re-create a new EC2 instance but instead can be applies in-place, the script will not get executed again.
+
+### Extract to Shell Script
+Instead of writing the whole script inside the user_data attribute, we can also extract it to a file and reference it just as we did before with the public key file:
+
+_main.tf_
+```conf
+    user_data = file("entry-script.sh")
+```
+
+_entry-script.sh_
+```sh
+#!/bin/bash
+
+# install and start docker
+sudo yum update -y && sudo yum install -y docker
+sudo systemctl start docker
+
+# add ec2-user to docker group to allow it to call docker commands
+sudo usermod -aG docker ec2-user
+
+# start a docker container running nginx
+docker run -p 8080:80 nginx
+```
+
+### Configuring Infrastructure not Servers
+This last step of installing Docker and running nginx in it showed that Terraform is great for provisioning the infratructure but doesn't help much when it comes to deploying applications on the provisioned infrastructure. The only support is to provide an attribute that allows to execute normal shell scripts. So Terraform passes over the responsibility to you and shell scripting.
+
+For tasks like deploying applications, configuring the server, installing or updating packages you better use configuration management tools like Chef, Puppet or Ansible.
+
+</details>
+
+*****
