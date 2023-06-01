@@ -125,7 +125,7 @@ To configure firewall rules for the EC2 instance we want to create (open port 22
 
 - Add `variable my_ip {}` to the variable definitions in the `main.tf` file.
 - Add `my_ip = "31.10.152.229/32"` (or whatever your current IP address is) to the `terraform.tfvars` file.
-- Add the folloing resource to the `main.tf` file:\
+- Add the following resource to the `main.tf` file:\
   _terraform/main.tf_
   ```conf
   resource "aws_default_security_group" "default-sg" {
