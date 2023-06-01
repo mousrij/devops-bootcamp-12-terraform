@@ -1139,7 +1139,7 @@ Instead of writing the whole script inside the user_data attribute, we can also 
 
 _main.tf_
 ```conf
-    user_data = file("entry-script.sh")
+user_data = file("entry-script.sh")
 ```
 
 _entry-script.sh_
