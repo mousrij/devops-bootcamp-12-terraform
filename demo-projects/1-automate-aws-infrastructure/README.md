@@ -16,7 +16,7 @@ Automate AWS Infrastructure
 
 #### Steps to automate provisioning AWS infrastructure and its components
 
-**Step 1:** Create a `terraform` folder\
+**Step 1:** Create a `terraform` folder
 ```sh
 mkdir terraform
 cd terraform
@@ -85,7 +85,7 @@ terraform apply --auto-approve
 ```
 
 **Step 3:** Create a Route Table & Internet Gateway\
-Add the folloing resources to the `main.tf` file:
+Add the following resources to the `main.tf` file:
 
 _terraform/main.tf_
 ```conf
@@ -125,7 +125,7 @@ To configure firewall rules for the EC2 instance we want to create (open port 22
 
 - Add `variable my_ip {}` to the variable definitions in the `main.tf` file.
 - Add `my_ip = "31.10.152.229/32"` (or whatever your current IP address is) to the `terraform.tfvars` file.
-- Add the folloing resource to the `main.tf` file:
+- Add the folloing resource to the `main.tf` file:\
   _terraform/main.tf_
   ```conf
   resource "aws_default_security_group" "default-sg" {
@@ -214,7 +214,7 @@ resource "aws_instance" "myapp-server" {
 }
 ```
 
-_terraform.tfvars_
+_terraform/terraform.tfvars_
 ```conf
 ...
 instance_type = "t2.micro"
@@ -319,7 +319,7 @@ To execute this script on the EC2 instance when it is initialized add the follow
 
 _terraform/main.tf_
 ```conf
-    user_data = file("entry-script.sh")
+user_data = file("entry-script.sh")
 ```
 
 Apply the changes:
