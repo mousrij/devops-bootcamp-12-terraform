@@ -393,7 +393,7 @@ terraform plan
 
 To apply changes without displaying the planned steps and without asking you for confirmation, execute
 ```sh
-terraform apply -auto-approve
+terraform apply --auto-approve
 ```
 
 If you want to destroy all the resources declared in the configuration file, just execute
@@ -476,8 +476,8 @@ output "test-subnet-1-id" {
 After the `output` keyword you provide a name of the output. The attribute `value` references the recource attribute you want to output.
 
 ```sh
-terraform destroy -auto-approve
-terraform apply -auto-approve
+terraform destroy --auto-approve
+terraform apply --auto-approve
 # ...
 # Apply complete! Resources: 3 added, 0 changed, 0 destroyed.
 # 
@@ -648,9 +648,9 @@ We're going to provision an EC2 instance on AWS infrastructure and then run an n
 - create a custom VPC
 - create a custom Subnet in one of the availability zones
 - create a Route Table & Internet Gateway
+- create a Security Group (firewall)
 - provision EC2 instance
 - deploy nginx Docker container
-- create a Security Group (firewall)
 
 A best practice when working with Terraform is to ceate the infrastructure from scratch and leave the defaults created by AWS as is. This makes it easier to clean up and remove all the components created by Terraform when you don't need them anymore. That's why we don't use the default VPC but create our own custom VPC.
 
@@ -707,7 +707,7 @@ env_prefix = "dev"
 Check what Terraform is going to do and if everything looks fine, apply the changes:
 ```sh
 terraform plan
-terraform apply -auto-approve
+terraform apply --auto-approve
 # ...
 # aws_vpc.myapp-vpc: Creating...
 # aws_vpc.myapp-vpc: Creation complete after 2s [id=vpc-09d8a5e6df029965c]
@@ -748,7 +748,7 @@ resource "aws_route_table" "myapp-route-table" {
 Check and apply the changes:
 ```sh
 terraform plan
-terraform apply -auto-approve
+terraform apply --auto-approve
 # aws_internet_gateway.myapp-igw: Creating...
 # aws_internet_gateway.myapp-igw: Creation complete after 0s [id=igw-0376d90b54fcef3ad]
 # aws_route_table.myapp-route-table: Creating...
@@ -903,7 +903,7 @@ Again, when applying this resource definition, the original default security gro
 Now let's create an EC2 instance.
 
 ### Amazon Machine Image (AMI) for EC2
-First of all we need an Amazon Machine Image (AMI) which will be used as a template for the EC2 virtual machine. We could go to the AWS Management Console and look up the id of the AMI we want to use. But this id may change when Amazon updates the image. So instead of hardcoding it into the configuration file, we define a `data` querying the latest version of the image we want to use (the AMI name can be found in in EC2 > AMI Catalog > Community AMIs):
+First of all we need an Amazon Machine Image (AMI) which will be used as a template for the EC2 virtual machine. We could go to the AWS Management Console and look up the id of the AMI we want to use. But this id may change when Amazon updates the image. So instead of hardcoding it into the configuration file, we define a `data` querying the latest version of the image we want to use (the AMI name can be found in EC2 > AMI Catalog > Community AMIs):
 
 ```conf
 data "aws_ami" "latest-amazon-linux-image" {
@@ -1011,7 +1011,7 @@ output "ec2_public_ip" {
 ```
 
 ### Automate SSH Key Pair
-Creating the key pair was a manual step. We should try to automate as many steps as possible. So let's use an existing key pair we created on our local machine and copy the public key to the EC2 instance.
+Creating the key pair was a manual step. We should try to automate as many steps as possible. So let's use an existing key pair we created on our local machine and copy the public key to the EC2 instance. If you haven't created a private/public key-pair yet, execute `ssh-keygen -t ed25519` to do so.
 
 Add the following content to the configuration file...
 
@@ -1122,7 +1122,7 @@ terraform apply
 # ec2_public_ip = "3.67.138.246"
 ```
 
-The server could be updated in-place. Open the browser and navigate to [http://3.67.138.246:8080](http://3.67.138.246:8080). You should see the nginx welcome page.
+The server could be updated in-place. Open the browser and navigate to `http://3.67.138.246:8080`. You should see the nginx welcome page.
 
 You can also ssh into the EC2 instance and execute `docker ps` to see the nginx container:
 ```sh
