@@ -722,7 +722,7 @@ Login to your AWS Management Console and navigate to the VPC dashboard. Click on
 
 Click on the route table link in the VPC details section and again on the ID link of the route table. In the Routes section you see that the route table only contains one route entry handling the traffic for all the IP addresses in the VPC range (Destination = 10.0.0.0/16) but only locally (Target = local), i.e. only VPC-internal traffic. There's no internet gateway configured connecting the Internet with our VPC (Destination = 0.0.0.0/0, Target = igw).
 
-Following the best practice, we don't add a route to the route table automatically created by AWS, but we create a new Route Table containing the two entries we need. The entry concerning the traffic of the VPC IP range (with Target = local) is created for each route table and cannot be created manually (or by Terraform). So we only have to define an entry for the internet connectivity. Add the folloing resources to the main.tf file:
+Following the best practice, we don't add a route to the route table automatically created by AWS, but we create a new Route Table containing the two entries we need. The entry concerning the traffic of the VPC IP range (with Target = local) is created for each route table and cannot be created manually (or by Terraform). So we only have to define an entry for the internet connectivity. Add the following resources to the main.tf file:
 
 ```conf
 resource "aws_internet_gateway" "myapp-igw" {
@@ -811,7 +811,7 @@ Note that this time we don't have to explicitly create a route-table-subnet-asso
 ### Security Group
 To configure firewall rules for the EC2 instance we want to create (open port 22 for ssh and port 8080 to access the nginx server), we need to create a security group.
 
-Add the folloing resource to the configuration file:
+Add the following resource to the configuration file:
 
 ```conf
 resource "aws_security_group" "myapp-sg" {
@@ -1161,6 +1161,218 @@ docker run -p 8080:80 nginx
 This last step of installing Docker and running nginx in it showed that Terraform is great for provisioning the infratructure but doesn't help much when it comes to deploying applications on the provisioned infrastructure. The only support is to provide an attribute that allows to execute normal shell scripts. So Terraform passes over the responsibility to you and shell scripting.
 
 For tasks like deploying applications, configuring the server, installing or updating packages you better use configuration management tools like Chef, Puppet or Ansible.
+
+</details>
+
+*****
+
+<details>
+<summary>Video: 15 - Provisioners in Terraform</summary>
+<br />
+
+As soon as the EC2 instance has been created, the Terraform `apply` command returns. It doesn't wait for any initialization scripts passed over via `user_data` to finish, nor does it report any errors that occured during script execution.
+
+To have more control over commands executed on a remote server you can use provisioners. There are three different provisioners:
+- `file`: copy a file from local machine to remote server
+- `remote-exec`: execute commands / a script on a remote server
+- `local-exec` execute commands / a script on the local machine
+
+If you use one of `file` or `remote-exec` you need to connect to the remote server. The connection is established using a `connection` block.
+
+To get an idea of how to use these entities, study the following self-explanatory examples:
+
+```conf
+connection {
+    type = "ssh"
+    host = self.public_ip
+    user = "ec2-user"
+    private_key = file(var.private_key_location)
+}
+
+provisioner "file" {
+    source = "entry-script.sh"
+    destination = "/home/ec2-user/entry-script-on-ec2.sh"
+}
+
+provisioner "remote-exec" {
+    script = file("entry-script-on-ec2.sh")
+}
+
+provisioner "local-exec" {
+    command = "echo ${self.public_ip} > output.txt"
+}
+```
+
+However, provisioners are NOT recommended by Terraform. They break the concept of idempotency because they are eexecuted only once when the EC2 instance is initialized. And because Terraform doesn't know what your scripts are doing, using the remote-exec provisioner also breaks the comparison between current and desired state.
+
+A better way of doing these kind of tasks is using configuration management tools like Ansible. So hand over the process to those tools once the server is provisioned.
+
+Of course you can also upload and execute scripts from the CI/CD pipeline, as we did in the previous modules.
+
+An alternative for using the `local-exec`provisioner is the provider called 'local' that is maintained by Hashicorp and can detect changes between the current state and the desired state. See its documentation [here](https://registry.terraform.io/providers/hashicorp/local/latest/docs).
+
+</details>
+
+*****
+
+<details>
+<summary>Video: 16 - Modules in Terraform - Part 1</summary>
+<br />
+
+Modules are container for multiple resources, used together. They help you organize and group your configuration files. Modules let you customize the configuration with input variables and access output values like created resources or specific attributes. Like this you can easily reuse the same configuration, e.g. for different AWS regions.
+
+You can either use existing modules from the [Terraform registry](https://registry.terraform.io/browse/modules), or create your own ones, just to clean up your code. For each existing module you'll find a description of the possible input and output values, the dependencies (to other modules or providers), the resources that may be created by the module, as well as provision instructions.
+
+</details>
+
+*****
+
+<details>
+<summary>Video: 17 - Modules in Terraform - Part 2</summary>
+<br />
+
+### Modularize our Project
+Let's divide our configuration file _terraform/main.tf_ into multiple reusable modules. It's a good practice to move the variable definitions into their own _variables.tf_ file, the outputs into an _outputs.tf_ file and the providers into a _providers.tf_ file. In the _main.tf_ file you will keep only the resources and data definitions.
+
+We don't have to cross-reference these files. Terraform just collects everything from the various `.tf` files it finds in the project folder. You can also give the files whatever names you like, however the mentioned names are just common practice.
+
+So we end up with a file
+
+_terraform/variables.tf_
+```conf
+variable env_prefix {}
+variable avail_zone {}
+variable vpc_cidr_block {}
+variable subnet_cidr_block {}
+variable my_ip {}
+variable instance_type {}
+variable public_key_location {}
+```
+
+a file
+
+_/terraform/outputs.tf_
+```conf
+output "aws_ami_id" {
+    value = data.aws_ami.latest-amazon-linux-image.id
+}
+
+output "ec2_public_ip" {
+    value = aws_instance.myapp-server.public_ip
+}
+```
+
+and a file _terraform/main.tf_ containing all the rest. Since we have just one provider we don't extract it into its own file.
+
+### Create Modules
+To create modules we first create a folder called `modules` and within that folder a folder for each module, e.g. one folder called `webserver` and a second one called `subnet`. And each module gets its own `main.tf`, `variables.tf` and `outputs.tf` files.
+
+```sh
+mkdir modules
+
+mkdir modules/webserver
+touch modules/webserver/main.tf
+touch modules/webserver/variables.tf
+touch modules/webserver/outouts.tf
+
+mkdir modules/subnet
+touch modules/subnet/main.tf
+touch modules/subnet/variables.tf
+touch modules/subnet/outputs.tf
+```
+
+This is the structure of modules in Terraform. Child modules are referenced by another module
+on a higher level.
+
+First let's extract the subnet related resources from the _terraform/main.tf_ file into the _terraform/modules/subnet/main.tf_ file. All the references to resources in the parent module have to be replaced by references to variables. And these variables have to be declared in the child module's _variables.tf_ file together with all the other variables referenced by the child module:
+
+_terraform/modules/subnet/main.tf_
+```conf
+resource "aws_subnet" "myapp-subnet-1" {
+    vpc_id = var.vpc_id                   # was aws_vpc.myapp-vpc.id
+    cidr_block = var.subnet_cidr_block
+    availability_zone = var.avail_zone
+    tags = {
+        Name = "${var.env_prefix}-subnet-1"
+    }
+}
+
+resource "aws_internet_gateway" "myapp-igw" {
+    vpc_id = var.vpc_id                   # was aws_vpc.myapp-vpc.id
+    tags = {
+        Name = "${var.env_prefix}-igw"
+    }
+}
+
+resource "aws_default_route_table" "main-rtb" {
+    default_route_table_id = var.default_route_table_id  # was aws_vpc.myapp-vpc.default_route_table_id
+
+    route {
+        cidr_block = "0.0.0.0/0"
+        gateway_id = aws_internet_gateway.myapp-igw.id  # doesn't have to be replaced by a variable since it references a resource inside the same module
+    }
+    tags = {
+        Name = "${var.env_prefix}-main-rtb"
+    }
+}
+```
+
+_terraform/modules/subnet/variables.tf_
+```conf
+variable env_prefix {}
+variable avail_zone {}
+variable subnet_cidr_block {}
+variable vpc_id {}                  # new variable defined here
+variable default_route_table_id {}  # new variable defined here
+```
+
+### Use the Module
+To reference the new child module from the root module, the root module uses a `module` block:
+
+_terraform/main.tf_
+```conf
+module "myapp-subnet" {
+  source = "./modules/subnet"
+
+  env_prefix = var.env_prefix
+  avail_zone = var.avail_zone
+  subnet_cidr_block = var.subnet_cidr_block
+  vpc_id = aws_vpc.myapp-vpc.id
+  default_route_table_id = aws_vpc.myapp-vpc.default_route_table_id
+}
+```
+
+As you see, the variables for the child module are not defined in a _terraform.tfvars_ file of the child module but have to be passed from the root module to the child module by adding them as attributes inside the `module` block.
+
+### Module Output
+At this point the references in the root module to other resources that now have been moved to a child module (e.g. `subnet_id = aws_subnet.myapp-subnet-1.id` in the `aws_instance.myapp-server` resource) are broken.
+
+In order to fix these references, the child module has to output the required resources and the root module has to reference them. So first let the child module output the subnet resource:
+
+_terraform/modules/subnet/outputs.tf_
+```conf
+output "subnet" {
+  value = aws_subnet.myapp-subnet-1
+}
+```
+
+_terraform/main.tf_
+```conf
+resource "aws_instance" "myapp-server" {
+  ...
+  subnet_id = module.myapp-subnet.subnet.id  # was aws_subnet.myapp-subnet-1.id
+  ...
+}
+```
+
+### Apply Configuration Changes
+Whenever a module was created or changed we have to execute `terraform init` in order to reinitialize the working directory. Only then you can execute `terraform apply`.
+
+```sh
+terraform init
+terraform plan
+terraform apply --auto-approve
+```
 
 </details>
 
