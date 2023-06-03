@@ -1273,7 +1273,7 @@ mkdir modules
 mkdir modules/webserver
 touch modules/webserver/main.tf
 touch modules/webserver/variables.tf
-touch modules/webserver/outouts.tf
+touch modules/webserver/outputs.tf
 
 mkdir modules/subnet
 touch modules/subnet/main.tf
@@ -1356,11 +1356,13 @@ output "subnet" {
 }
 ```
 
+Now we can reference the output as follows:
+
 _terraform/main.tf_
 ```conf
 resource "aws_instance" "myapp-server" {
   ...
-  subnet_id = module.myapp-subnet.subnet.id  # was aws_subnet.myapp-subnet-1.id
+  subnet_id = module.myapp-subnet.subnet.id   # was aws_subnet.myapp-subnet-1.id
   ...
 }
 ```
@@ -1372,6 +1374,153 @@ Whenever a module was created or changed we have to execute `terraform init` in 
 terraform init
 terraform plan
 terraform apply --auto-approve
+```
+
+</details>
+
+*****
+
+<details>
+<summary>Video: 18 - Modules in Terraform - Part 3</summary>
+<br />
+
+### Create "webserver" Module
+Let's repeat the same steps to extract a "webserver" module responsible for creating an EC2 instance. First move the security group "default-sg", the AMI data "latest-amazon-linux-image", the key-pair "ssh-key" and the instance "myapp-server" from the root _main.tf_ file to the _modules/webserver/main.tf_ file. Then extract variables for elements to be passed in by the root module or for elements you think would make sense to be configurable for a module creating an EC2 instance (e.g. the ami name). Note that you cannot reference sibling modules. This results in the following files:
+
+_terraform/modules/webserver/main.tf_
+```conf
+resource "aws_default_security_group" "default-sg" {
+  vpc_id = var.vpc_id    # was aws_vpc.myapp-vpc.id
+
+  ingress {
+    from_port = 22
+    to_port = 22
+    protocol = "tcp"
+    cidr_blocks = [var.my_ip]
+  }
+
+  ...
+
+  tags = {
+    Name = "${var.env_prefix}-default-sg"
+  }
+}
+
+data "aws_ami" "latest-amazon-linux-image" {
+  most_recent = true
+  owners = ["amazon"]
+  filter {
+    name = "name"
+    values = [var.image_name]    # was "amzn2-ami-kernel-5.10-hvm-*-x86_64-gp2"
+  }
+  filter {
+    name = "virtualization-type"
+    values = ["hvm"]
+  }
+}
+
+resource "aws_key_pair" "ssh-key" {
+  key_name = "server-key"
+  public_key = file(var.public_key_location)
+}
+
+resource "aws_instance" "myapp-server" {
+  ami = data.aws_ami.latest-amazon-linux-image.id
+  instance_type = var.instance_type
+
+  subnet_id = var.subnet_id    # was module.myapp-subnet.subnet.id
+  vpc_security_group_ids = [aws_default_security_group.default-sg.id]
+  availability_zone = var.avail_zone
+
+  associate_public_ip_address = true
+  key_name = aws_key_pair.ssh-key.key_name
+
+  user_data = file("entry-script.sh")   # note that file paths are relative to the root module
+
+  tags = {
+    Name = "${var.env_prefix}-server"
+  }
+}
+```
+
+_terraform/modules/webserver/variables.tf_
+```conf
+variable env_prefix {}
+variable avail_zone {}
+variable my_ip {}
+variable instance_type {}
+variable public_key_location {}
+variable vpc_id {}
+variable image_name {}
+variable subnet_id {}
+```
+
+Now we can reference the new module from within the root module's configuration file:
+
+_terraform/main.tf_
+```conf
+module "myapp-server" {
+  source = "./modules/webserver"
+  
+  env_prefix = var.env_prefix
+  avail_zone = var.avail_zone
+  vpc_id = aws_vpc.myapp-vpc.id
+  subnet_id = module.myapp-subnet.subnet.id
+  my_ip = var.my_ip
+  image_name = var.image_name
+  public_key_location = var.public_key_location
+  instance_type = var.instance_type
+}
+```
+
+As we introduced a new variable `image_name` we have to add it to the file _terraform/variables.tf_ and set its value in the file _terraform/terraform.tfvars_:
+
+_terraform/variables.tf_
+```conf
+variable env_prefix {}
+variable avail_zone {}
+variable vpc_cidr_block {}
+variable subnet_cidr_block {}
+variable my_ip {}
+variable image_name {}   # <---
+variable instance_type {}
+variable public_key_location {}
+```
+
+_terraform/terraform.tfvars_
+```conf
+env_prefix = "dev"
+avail_zone = "eu-central-1a"
+vpc_cidr_block = "10.0.0.0/16"
+subnet_cidr_block = "10.0.10.0/24"
+my_ip = "31.10.152.229/32"
+image_name = "amzn2-ami-kernel-5.10-hvm-*-x86_64-gp2"   # <---
+instance_type = "t2.micro"
+public_key_location = "/Users/fsiegrist/.ssh/id_ed25519.pub"
+```
+
+And finally we have to adjust the outputs. The references in the root module's _outputs.tf_ file are broken. We have to output the required resources in the child module (webserver) and reference these outputs in the root module:
+
+_terraform/modules/webserver/outputs.tf_
+```conf
+output "instance" {
+    value = aws_instance.myapp-server
+}
+```
+
+_terraform/outputs.tf_
+```conf
+output "ec2_public_ip" {
+    value = module.myapp-server.instance.public_ip
+}
+```
+
+Now we can apply the chages. Again we have to execute `terraform init` first:
+
+```sh
+terraform init
+terraform plan
+terraform apply --auto-aprove
 ```
 
 </details>
