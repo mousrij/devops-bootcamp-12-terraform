@@ -1526,3 +1526,133 @@ terraform apply --auto-aprove
 </details>
 
 *****
+
+<details>
+<summary>Video: 19 - Automate Provisioning EKS cluster with Terraform - Part 1</summary>
+<br />
+
+Until now we created an EKS cluster manually on the AWS Management Console and then using the command line tool `eksctl`. But either way was rather complex because there are quite a few compontents to be created and configured. And we don't have a history of what we did (e.g. in a version control system), a simple replication of the infrastructure in another environment isn't possible, the collaboration in a team is difficult (if many developers are working on the configuration of the cluster) and finally there is no simple way of cleaning up the whole cluster when we don't need it anymore.
+
+All these aspects make provisioning an EKS cluster using Terraform the currently best and most efficient way to do so.
+
+Let's recap what needs to be done to setup an EKS cluster:
+- create a Control Plane (the EKS service itself)
+- create a VPC for the Worker Nodes
+- create a group of Worker Nodes (EC2 instances) in all the Availability Zones of the current region and connect them with the Control Plane
+
+### VPC
+We configured the VPC to be used for EKS with the Cloudformation template. Cloudformation is a provisioning alternative for Terraform but specific to AWS. We cannot use the Cloudformation template in Terraform but we can use an existing Terraform module provisioning a VPC suitable for use with EKS.
+
+Open the browser and navigate to [Terraform AWS modules (VPC)](https://registry.terraform.io/modules/terraform-aws-modules/vpc/aws/latest?tab=resources) and copy the configuration snippet in the "Provision Instructions" box and copy it into a file called `vpc.tf` in the `terraform` folder:
+
+_terraform/vpc.tf_
+```conf
+module "vpc" {
+  source  = "terraform-aws-modules/vpc/aws"
+  version = "5.0.0"
+}
+```
+
+The module gets downloaded when `terraform init` is executed.
+
+Let's change the module name to `myapp-vpc`. Now we have to define at least the required attributes for the module. Since this module does not have any required attributes we can choose which of the optional ones we want to define. The final `vpc.tf` file will then look like this:
+
+_terraform/vpc.tf_
+```conf
+provider "aws" {
+  region = "eu-central-1"
+}
+
+variable vpc_cidr_block {}
+variable private_subnet_cidr_blocks {}
+variable public_subnet_cidr_blocks {}
+
+data "aws_availability_zones" "available" {}  # queries the azs in the region of the provider
+
+module "myapp-vpc" {
+  source  = "terraform-aws-modules/vpc/aws"
+  version = "5.0.0"
+
+  name = "myapp-vpc"
+  cidr = var.vpc_cidr_block
+  # Best practice for configuring subnets for an EKS cluster: configure one private and one public subnet in each availability zone of the current region.
+  private_subnets = var.private_subnet_cidr_blocks
+  public_subnets = var.public_subnet_cidr_blocks
+  azs = data.aws_availability_zones.available.names 
+  
+  enable_nat_gateway = true
+  single_nat_gateway = true  # all private subnets will route their internet traffic through this single NAT gateway
+  enable_dns_hostnames = true
+
+  tags = {
+    "kubernetes.io/cluster/myapp-eks-cluster" = "shared"  # for AWS Cloud Control Manager (it needs to know which VPC it should connect to)
+  }
+
+  public_subnet_tags = {
+    "kubernetes.io/cluster/myapp-eks-cluster" = "shared"  # for AWS Cloud Control Manager (it needs to know which subnet it should connect to)
+    "kubernetes.io/role/elb" = 1  # for AWS Load Balancer Controller (it needs to know in which subnet to create the load balancer accessible from the internet)
+  }
+
+  private_subnet_tags = {
+    "kubernetes.io/cluster/myapp-eks-cluster" = "shared"
+    "kubernetes.io/role/internal-elb" = 1 
+  }
+}
+```
+
+Now we can initialize the Terraform project and validate it to see if out configuration is syntactically correct so far:
+
+```sh
+terraform init
+# Initializing the backend...
+# Initializing modules...
+# Downloading registry.terraform.io/terraform-aws-modules/vpc/aws 5.0.0 for myapp-vpc...
+# - myapp-vpc in .terraform/modules/myapp-vpc
+# 
+# Initializing provider plugins...
+# - Finding hashicorp/aws versions matching ">= 5.0.0"...
+# - Installing hashicorp/aws v5.1.0...
+# - Installed hashicorp/aws v5.1.0 (signed by HashiCorp)
+# 
+# ...
+# 
+# Terraform has been successfully initialized!
+
+terraform plan
+# data.aws_availability_zones.available: Reading...
+# data.aws_availability_zones.available: Read complete after 0s [id=eu-central-1]
+# 
+# ...
+# 
+# Terraform will perform the following actions:
+#
+#   # module.myapp-vpc.aws_default_network_acl.this[0] will be created
+#   # module.myapp-vpc.aws_default_route_table.default[0] will be created
+#   # module.myapp-vpc.aws_default_security_group.this[0] will be created
+#   # module.myapp-vpc.aws_eip.nat[0] will be created
+#   # module.myapp-vpc.aws_internet_gateway.this[0] will be created
+#   # module.myapp-vpc.aws_nat_gateway.this[0] will be created
+#   # module.myapp-vpc.aws_route.private_nat_gateway[0] will be created
+#   # module.myapp-vpc.aws_route.public_internet_gateway[0] will be created
+#   # module.myapp-vpc.aws_route_table.private[0] will be created
+#   # module.myapp-vpc.aws_route_table.public[0] will be created
+#   # module.myapp-vpc.aws_route_table_association.private[0] will be created
+#   # module.myapp-vpc.aws_route_table_association.private[1] will be created
+#   # module.myapp-vpc.aws_route_table_association.private[2] will be created
+#   # module.myapp-vpc.aws_route_table_association.public[0] will be created
+#   # module.myapp-vpc.aws_route_table_association.public[1] will be created
+#   # module.myapp-vpc.aws_route_table_association.public[2] will be created
+#   # module.myapp-vpc.aws_subnet.private[0] will be created
+#   # module.myapp-vpc.aws_subnet.private[1] will be created
+#   # module.myapp-vpc.aws_subnet.private[2] will be created
+#   # module.myapp-vpc.aws_subnet.public[0] will be created
+#   # module.myapp-vpc.aws_subnet.public[1] will be created
+#   # module.myapp-vpc.aws_subnet.public[2] will be created
+#   # module.myapp-vpc.aws_vpc.this[0] will be created
+```
+
+Everything seems to be ok. But before we apply it, we need to create the EKS and other resources (see next video).
+
+</details>
+
+*****
