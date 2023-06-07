@@ -63,7 +63,7 @@ module "vpc" {
 }
 ```
 
-**Step 2:** Vaidate the configuration file\
+**Step 2:** Validate the configuration file\
 Now we can initialize the Terraform project and validate it to see if the configuration is syntactically correct so far:
 
 ```sh
@@ -155,7 +155,7 @@ module "eks" {
 }
 ```
 
-**Step 2:** Apply the Configuration Files\
+**Step 2:** Apply the configuration files\
 Because we added a new module, we have to execute `terraform init` again.
 
 ```sh
