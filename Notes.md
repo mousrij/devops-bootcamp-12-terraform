@@ -1850,3 +1850,427 @@ terraform state list
 </details>
 
 *****
+
+<details>
+<summary>Video: 22 - Complete CI/CD with Terraform - Part 1</summary>
+<br />
+
+### CI/CD with Terraform
+Instead of manually create en EC2 instance before running the Jenkins pipeline to build an application and deploy it on the EC2 instance, we want to integrate Terraform into the build pipeline and provision the EC2 server as part of the build pipeline.
+
+In order to do so we need to
+- create a key-pair,
+- install Terraform inside the Jenkins container
+- add Terraform configuration files to the project
+- adjust the Jenkinsfile.
+
+</details>
+
+*****
+
+<details>
+<summary>Video: 23 - Complete CI/CD with Terraform - Part 2</summary>
+<br />
+
+### Create SSH Key-Pair
+Login to your AWS Management Console and navigate to the EC2 dashboard. Click the "Key pairs" link and press "Create key pair". Enter a name (e.g. myapp-key-pair), select the type ED25519 and the format .pem and press "Create key pair". A `myapp-key-pair.pem` file containing the private key is automatically downloaded. (The public key is stored in AWS.)
+
+Now we have to store this private key on Jenkins server. First move the .pem file from the download folder to the ssh folder and copy its content to the clipboard:
+
+```sh
+mv ~/Downloads/myapp-key-pair.pem ~/.ssh/
+pbcopy < ~/.ssh/myapp-key-pair.pem
+```
+
+Now login to your Jenkins server and open the multibranch pipeline project for the java-maven-app (Dashboard > devops-bootcamp-multibranch-pipeline). Click on Credentials > Store devops-bootcamp-multibranch-pipeline > Global credentials (unrestricted) and press "+ Add Credentials". Select the kind "SSH Username with private key", enter an ID (e.g. server-ssh-key), the username is 'ec2-user', select Private Key > Enter directly, press Key > Add, paste the private key from the clipboard and press "Create".
+
+Now we can assiciate the `myapp-key-pair` key in AWS with an EC2 instance when we create it with Terraform.
+
+### Install Terraform inside Jenkins Container
+To install Terraform inside Jenkins container we have to ssh into the Droplet running the Jenkins container and enter the container:
+
+```sh
+ssh root@<jenkins-droplet-ip>
+# => root@jenkins-server:~#
+
+docker ps
+# CONTAINER ID   IMAGE                 COMMAND                  CREATED        STATUS       PORTS                                                                                      NAMES
+# 54ae5b80a7c8   jenkins/jenkins:lts   "/usr/bin/tini -- /u…"   2 months ago   Up 2 weeks   0.0.0.0:8080->8080/tcp, :::8080->8080/tcp, 0.0.0.0:50000->50000/tcp, :::50000->50000/tcp   nervous_euler
+
+docker exec -it -u 0 54ae5b80a7c8 bash
+# => root@54ae5b80a7c8:/#
+
+cat /etc/os-release
+# PRETTY_NAME="Debian GNU/Linux 11 (bullseye)"
+# NAME="Debian GNU/Linux"
+# VERSION_ID="11"
+# VERSION="11 (bullseye)"
+# VERSION_CODENAME=bullseye
+# ID=debian
+# HOME_URL="https://www.debian.org/"
+# SUPPORT_URL="https://www.debian.org/support"
+# BUG_REPORT_URL="https://bugs.debian.org/"
+
+# find the installation instructions for Linux Debian on 'https://developer.hashicorp.com/terraform/tutorials/aws-get-started/install-cli'
+
+apt-get update && apt-get install -y gnupg software-properties-common wget
+
+# Install the HashiCorp GPG key
+wget -O- https://apt.releases.hashicorp.com/gpg | \
+gpg --dearmor | \
+tee /usr/share/keyrings/hashicorp-archive-keyring.gpg
+
+# Verify the key's fingerprint
+gpg --no-default-keyring \
+--keyring /usr/share/keyrings/hashicorp-archive-keyring.gpg \
+--fingerprint
+# /usr/share/keyrings/hashicorp-archive-keyring.gpg
+# -------------------------------------------------
+# pub   rsa4096 2023-01-10 [SC] [expires: 2028-01-09]
+#       798A EC65 4E5C 1542 8C8E  42EE AA16 FCBC A621 E701
+# uid           [ unknown] HashiCorp Security (HashiCorp Package Signing) <security+packaging@hashicorp.com>
+# sub   rsa4096 2023-01-10 [S] [expires: 2028-01-09]
+
+# Add the official HashiCorp repository to your system
+echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] \
+https://apt.releases.hashicorp.com $(lsb_release -cs) main" | \
+tee /etc/apt/sources.list.d/hashicorp.list
+
+# Download the package information from HashiCorp
+apt update
+
+# Install Terraform from the new repository
+apt-get install terraform
+
+# Check
+terraform -v
+# Terraform v1.4.6
+# on linux_amd64
+```
+
+### Terraform Configuration Files
+Now we have to add Terraform configuration files to the java-maven-app project repository. Open the project and create a new branch called `sshagent-terraform`. Create `terraform` folder containing a `main.tf` file and copy the content of the configuration file created in video 12-14 (or in demo project #1) to this `main.tf` file. We can remove the resource "aws_key_pair.ssh-key" because we manually created a key-pair. In the resource "aws_instance.myapp-server" we replace the "key_name" attribute value `aws_key_pair.ssh-key.key_name` (referencing the deleted resource) with the hardcoded name of the manually created key-pair (`"myapp-key-pair"`). We also delete the varaible `public_key_location`.
+
+Since we do not check in the `terraform.tfvars` file, we have to find another way of providing the variable values for the Jenkins pipeline. An easy way is to define default values for all the variables. So lets move all the variables from the `main.tf` file into their own separate file `variables.tf`. And instead of just defining the variable names, we now also define a default value for each variable. We end up with a `variables.tf` file with the following content:
+
+```conf
+variable env_prefix {
+    default = "dev"
+}
+variable region {
+    default = "eu-central-1"
+}
+variable avail_zone {
+    default = "eu-central-1a"
+}
+variable vpc_cidr_block {
+    default = "10.0.0.0/16"
+}
+variable subnet_cidr_block {
+    default = "10.0.10.0/24"
+}
+variable my_ip {
+    default = "31.10.152.229/32"
+}
+variable jenkins_ip {
+    default = "64.225.104.226/32"
+}
+variable instance_type {
+    default = "t2.micro"
+}
+```
+
+Now Jenkins does not have to provide any variable values, as long as the default values are ok. Of course we can override each value by providing a `terraform.tfvars` file with the variable values to be overridden. Jenkins can override the default variable values by defining environment variables of the form `TF_VAR_variable_name`.
+
+The final `main.tf` file looks like this:
+
+```conf
+terraform {
+  required_providers {
+    aws = {
+      source = "hashicorp/aws"
+      version = "4.67.0"
+    }
+  }
+}
+
+provider "aws" {
+  region = var.region
+}
+
+resource "aws_vpc" "myapp-vpc" {
+    cidr_block = var.vpc_cidr_block
+    tags = {
+        Name = "${var.env_prefix}-vpc"
+    }
+}
+
+resource "aws_subnet" "myapp-subnet-1" {
+    vpc_id = aws_vpc.myapp-vpc.id
+    cidr_block = var.subnet_cidr_block
+    availability_zone = var.avail_zone
+    tags = {
+        Name = "${var.env_prefix}-subnet-1"
+    }
+}
+
+resource "aws_internet_gateway" "myapp-igw" {
+    vpc_id = aws_vpc.myapp-vpc.id
+    tags = {
+        Name = "${var.env_prefix}-igw"
+    }
+}
+
+resource "aws_default_route_table" "main-rtb" {
+    default_route_table_id = aws_vpc.myapp-vpc.default_route_table_id
+
+    route {
+        cidr_block = "0.0.0.0/0"
+        gateway_id = aws_internet_gateway.myapp-igw.id
+    }
+    tags = {
+        Name = "${var.env_prefix}-main-rtb"
+    }
+}
+
+resource "aws_default_security_group" "default-sg" {
+    vpc_id = aws_vpc.myapp-vpc.id
+
+    ingress {
+        from_port = 22
+        to_port = 22
+        protocol = "tcp"
+        cidr_blocks = [var.my_ip, var.jenkins_ip]
+    }
+
+    ingress {
+        from_port = 8080
+        to_port = 8080
+        protocol = "tcp"
+        cidr_blocks = ["0.0.0.0/0"]
+    }
+
+    egress {
+        from_port = 0
+        to_port = 0
+        protocol = "-1"
+        cidr_blocks = ["0.0.0.0/0"]
+        prefix_list_ids = []
+    }
+
+    tags = {
+        Name = "${var.env_prefix}-default-sg"
+    }
+}
+
+data "aws_ami" "latest-amazon-linux-image" {
+    most_recent = true
+    owners = ["amazon"]
+    filter {
+        name = "name"
+        values = ["amzn2-ami-kernel-5.10-hvm-*-x86_64-gp2"]
+    }
+    filter {
+        name = "virtualization-type"
+        values = ["hvm"]
+    }
+}
+
+resource "aws_instance" "myapp-server" {
+    ami = data.aws_ami.latest-amazon-linux-image.id
+    instance_type = var.instance_type
+
+    subnet_id = aws_subnet.myapp-subnet-1.id
+    vpc_security_group_ids = [aws_default_security_group.default-sg.id]
+    availability_zone = var.avail_zone
+
+    associate_public_ip_address = true
+    key_name = "myapp-key-pair"
+
+    user_data = file("entry-script.sh")
+
+    tags = {
+        Name = "${var.env_prefix}-server"
+    }
+}
+
+output "ec2_public_ip" {
+    value = aws_instance.myapp-server.public_ip
+}
+```
+
+Finally we have to copy the file `entry-script.sh` we created in video 12-14 (or in demo project #1). However, instead of running an nginx container (last command), we install docker-compose, because in the project's Jenkinsfile we upload a docker-compose.yaml to the remote server and execute it with docker-compose. So we replace the last command with two commands installing docker-compose and setting executable permission (see [Install Docker Compose](https://docs.docker.com/compose/install/standalone/)). The final `entry-script.sh` file looks like this:
+
+```sh
+#!/bin/bash
+
+# install and start docker
+sudo yum update -y && sudo yum install -y docker
+sudo systemctl start docker
+
+# add ec2-user to docker group to allow it to call docker commands
+sudo usermod -aG docker ec2-user
+
+# install docker-compose 
+sudo curl -L "https://github.com/docker/compose/releases/download/v2.18.1/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+sudo chmod +x /usr/local/bin/docker-compose
+```
+
+### Provision Stage in Jenkinsfile
+Now we can add a stage to the pipeline which provisions an EC2 instance by executing terraform commands. Add the following stage definition to the Jenkinsfile right after the "Build and Publisch Docker Image" stage:
+
+```groovy
+stage('Provision Server') {
+    environment {
+        AWS_ACCESS_KEY_ID = credentials('jenkins_aws_access_key_id')
+        AWS_SECRET_ACCESS_KEY = credentials('jenkins_aws_secret_access_key')
+        TF_VAR_env_prefix = 'test'
+    }
+    steps {
+        script {
+            dir('terraform') {
+                sh "terraform init"
+                sh "terraform apply --auto-approve"
+            }
+        }
+    }
+}
+```
+
+The first two environment variables are needed to authenticate Jenkins server against AWS. We reuse credentials created in a previous video. The third environment variable is just here to demonstrate how we can override the default values defined in the `variables.tf` file.
+
+### Deploy Stage in Jenkinsfile
+The "Deploy Application" stage we wrote in module 9 (AWS Services) looked like this:
+
+```groovy
+stage('Deploy Application') {
+    steps {
+        script {
+            echo 'deploying Docker image to EC2 server...'
+            def shellCmd = "bash ./server-cmds.sh ${IMAGE_TAG}"
+            sshagent(['ec2-server-key']) {
+                sh 'scp -o StrictHostKeyChecking=no server-cmds.sh docker-compose.yaml ec2-user@35.156.226.244:/home/ec2-user'
+                sh "ssh -o StrictHostKeyChecking=no ec2-user@35.156.226.244 ${shellCmd}"
+            }
+        }
+    }
+}
+```
+
+Now we can no longer hardcode the IP address of the EC2 instance, since a new EC2 instance is created by the "provision Server" stage during the first pipeline run. So we have to reference the output "ec2_public_ip" of the terraform `main.tf` configuration file. A possible way to achieve this is to store the value in an environment variable. We add the following command to the script of the "Provision Server" stage:
+
+```groovy
+script {
+    dir('terraform') {
+        sh "terraform init"
+        sh "terraform apply --auto-approve"
+        EC2_PUBLIC_IP = sh(
+            script: "terraform output ec2_public_ip",
+            returnStdout: true
+        ).trim()
+    }
+}
+```
+
+We then can access this variable in the "Deploy Application" stage:
+
+```groovy
+def ec2Instance = "ec2-user@${EC2_PUBLIC_IP}"
+
+sshagent(['server-ssh-key']) {
+  sh "scp -o StrictHostKeyChecking=no server-cmds.sh docker-compose.yaml ${ec2Instance}:/home/ec2-user"
+  sh "ssh -o StrictHostKeyChecking=no ${ec2Instance} ${shellCmd}"
+}
+```
+
+Note that we also switched to the new key-pair name 'server-ss-key'.
+
+Another problem is that when the EC2 isntance is created, the `terraform apply` command returns and the "Provision Server" stage is done. However, the EC2 instance has not been initialized yet. The commands in `entry-script.sh` are still being executed. This means that docker-compose might not be available when the "Deploy Application" stage starts. The easiest way to solve this issue is to pause the pipeline execution for a certain duration until we can expect the initialization process to have finished. Let's add the following commands to the beginning of the script in the "Deploy Application" stage:
+
+```groovy
+echo "waiting for EC2 server to initialize" 
+sleep(time: 90, unit: "SECONDS") 
+
+echo 'deploying Docker image to EC2 server...'
+echo "${EC2_PUBLIC_IP}"
+```
+
+Of course this is not an ideal solution because it slows down the pipeline. The sleep is only necessary during the first pipeline run. During the following runs the EC2 instance is already up and running and does not have to be initialized anymore.
+
+</details>
+
+*****
+
+<details>
+<summary>Video: 24 - Complete CI/CD with Terraform - Part 3</summary>
+<br />
+
+### Docker Login Required to Pull Docker Image
+When the docker-compose command is executed on the EC2 instance, the Docker image of the java-maven-app has to be pulled from the private registry on Docker Hub. So the EC2 instance has to login to this private registry. In module 09 (AWS Services) we ssh-ed into the manually created EC2 instance and manually executed the `docker login` command. But now we want to automate this process and add the `docker login` command to the `server-cmds.sh` script that is copied to the EC2 instance and executed there:
+
+```sh
+#!/usr/bin/env/ bash
+
+export IMAGE_TAG=$1
+export DOCKER_USER=$2 # <--
+export DOCKER_PWD=$3  # <--
+echo $DOCKER_PWD | docker login -u $DOCKER_USER --password-stdin  # <--
+docker-compose -f docker-compose.yaml up -d
+echo "successfully started the containers using docker-compose"
+```
+
+We have to pass two additional parameters to the script: the username and password of the private Docker Hub registry. In the Jenkinsfile this is done as follows:
+
+```groovy
+stage('Deploy Application') {
+    environment {
+        DOCKER_CREDS = credentials('docker-hub-repo')  // <-- this command implicitly creates two environment variables DOCKER_CREDS_USR and DOCKER_CREDS_PSW
+    }
+    steps {
+        script {
+            echo "waiting for EC2 server to initialize" 
+            sleep(time: 90, unit: "SECONDS") 
+
+            echo 'deploying Docker image to EC2 server...'
+            echo "${EC2_PUBLIC_IP}"
+
+            def shellCmd = "bash ./server-cmds.sh ${IMAGE_TAG} ${DOCKER_CREDS_USR} ${DOCKER_CREDS_PSW}"  // <-- use the implicitly created environment variables
+            def ec2Instance = "ec2-user@${EC2_PUBLIC_IP}"
+
+            sshagent(['server-ssh-key']) {
+                sh "scp -o StrictHostKeyChecking=no server-cmds.sh docker-compose.yaml ${ec2Instance}:/home/ec2-user"
+                sh "ssh -o StrictHostKeyChecking=no ${ec2Instance} ${shellCmd}"
+            }
+        }
+    }
+}
+```
+
+### Run the Pipeline
+Because we created a new branch `feature/sshagent-terraform` we have to adjust the branch name in the final "Commit Version Update" stage:
+
+```groovy
+sh 'git push origin HEAD:feature/sshagent-terraform'
+```
+
+Now we can commit and push all the changes to the project repository:
+
+```sh
+git add .
+git commit -m "Deploy on ec2 instance provisioned using terraform"
+git push -u origin feature/sshagent-terraform
+```
+
+If we have configured the multibranch pipeline on Jenkins to build all the branches, the new branch will be detected and the first pipeline build will be triggered automatically.
+
+After the build finished check the logs to get the IP address of the newly provisioned EC2 instance. SSH into this EC2 instance and check whether a docker container with the java-maven-app is running:
+
+```sh
+chmod 400 ~/.ssh/myapp-key-pair.pem
+ssh -i ~/.ssh/myapp-key-pair.pem ec2-user@<ip-address-copied-from-jenkins-log>
+docker ps
+```
+
+</details>
+
+*****
