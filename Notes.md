@@ -2274,3 +2274,44 @@ docker ps
 </details>
 
 *****
+
+<details>
+<summary>Video: 25 - Remote State in Terraform</summary>
+<br />
+
+When working with Terraform in a team you might want to share the state and be sure everyone works on the same state. Instead of using a local state file on every machine executing terraform commands, it is possible to configure a remote state file. There are different remote storage options available.
+
+### Configure Remote Storage
+Inside a Terraform configuration file you can define a `terraform` block having different attributes one of which is the `backend` attribute defining the state storage. The default value is "local", which stores the state data in a local file called `terraform.tfstate`.
+
+With "remote" backend, Terraform writes the state data to a remote data store, which can then be shared between all members of a team. Terraform supports storing state in Terraform Cloud, HashiCorp Consul, Amazon S3, Azure Blob Storage, Google Cloud Storage, Alibaba Cloud OSS, and more.
+
+As an example we configure the usage of an Amazon S3 file storage:
+
+```conf
+terraform {
+  required_version = ">= 1.2.0"
+  backend "s3" {
+    bucket = "my-devops-bootcamp-tfstate-bucket"
+    key = "myapp/state.tfstate"
+    region = "eu-central-1"
+  }
+}
+```
+
+To use this storage we first have to create the bucket on AWS.
+
+### Create AWS S3 Bucket
+Login to your AWS Management Console and navigate to Services > Storage > S3. The current region automatically switches to "Global". Press "Create bucket", enter the bucket name "my-devops-bootcamp-tfstate-bucket" (must be a name which is unique in the global namespace), select your region (e.g. eu-central-1), enable Bucket Versioning and leave all the other options unchanged. Press "Create bucket". Clicking on the newly created bucket opens it, but there are no objects stored yet.
+
+When we commit our changes to the configuration file and thus trigger a new build of the multibranch pipeline, the first version of the remote state file will be creates by Jenkins.
+
+If you want to use this state file from your local machine, you have to execute
+```sh
+terraform init
+terraform state list # <-- connects to the s3 bucket and reads the current state from there
+```
+
+</details>
+
+*****
