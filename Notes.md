@@ -2044,8 +2044,8 @@ resource "aws_default_security_group" "default-sg" {
     }
 
     ingress {
-        from_port = 8080
-        to_port = 8080
+        from_port = 8000
+        to_port = 8000
         protocol = "tcp"
         cidr_blocks = ["0.0.0.0/0"]
     }
@@ -2122,8 +2122,8 @@ Now we can add a stage to the pipeline which provisions an EC2 instance by execu
 ```groovy
 stage('Provision Server') {
     environment {
-        AWS_ACCESS_KEY_ID = credentials('jenkins_aws_access_key_id')
-        AWS_SECRET_ACCESS_KEY = credentials('jenkins_aws_secret_access_key')
+        AWS_ACCESS_KEY_ID = credentials('jenkins-aws_access_key_id')
+        AWS_SECRET_ACCESS_KEY = credentials('jenkins-aws_secret_access_key')
         TF_VAR_env_prefix = 'test'
     }
     steps {
@@ -2224,7 +2224,7 @@ We have to pass two additional parameters to the script: the username and passwo
 ```groovy
 stage('Deploy Application') {
     environment {
-        DOCKER_CREDS = credentials('docker-hub-repo')  // <-- this command implicitly creates two environment variables DOCKER_CREDS_USR and DOCKER_CREDS_PSW
+        DOCKER_CREDS = credentials('DockerHub')  // <-- this command implicitly creates two environment variables DOCKER_CREDS_USR and DOCKER_CREDS_PSW
     }
     steps {
         script {
@@ -2271,6 +2271,8 @@ ssh -i ~/.ssh/myapp-key-pair.pem ec2-user@<ip-address-copied-from-jenkins-log>
 docker ps
 ```
 
+Open the browser and navigate to 'http://<ip-address-copied-from-jenkins-log>:8000' to see the java-maven-app in action.
+
 </details>
 
 *****
@@ -2304,12 +2306,37 @@ To use this storage we first have to create the bucket on AWS.
 ### Create AWS S3 Bucket
 Login to your AWS Management Console and navigate to Services > Storage > S3. The current region automatically switches to "Global". Press "Create bucket", enter the bucket name "my-devops-bootcamp-tfstate-bucket" (must be a name which is unique in the global namespace), select your region (e.g. eu-central-1), enable Bucket Versioning and leave all the other options unchanged. Press "Create bucket". Clicking on the newly created bucket opens it, but there are no objects stored yet.
 
-When we commit our changes to the configuration file and thus trigger a new build of the multibranch pipeline, the first version of the remote state file will be creates by Jenkins.
+When we commit our changes to the configuration file and thus trigger a new build of the multibranch pipeline, the first version of the remote state file will be creates by Jenkins. If the `terraform init` command fails because it prompts whether the existing local state should be migrated to the new S3 remote state, you may have to enter the Jenkins workspace and manually delete the local state file:
+
+```sh
+ssh root@<jenkins-droplet-ip>
+docker exec -it <jenkins-container-id> bash
+cd /var/jenkins_home/workspace/<pipeline>/terraform
+rm terraform.tfstate
+rm terraform.tfstate.backup
+exit
+exit
+```
+
+Then you can trigger a new pipeline build via Jenkins UI.
 
 If you want to use this state file from your local machine, you have to execute
 ```sh
 terraform init
+# Initializing the backend...
+# 
+# Successfully configured the backend "s3"! Terraform will automatically
+# use this backend unless the backend configuration changes.
+# ...
+
 terraform state list # <-- connects to the s3 bucket and reads the current state from there
+# data.aws_ami.latest-amazon-linux-image
+# aws_default_route_table.main-rtb
+# aws_default_security_group.default-sg
+# aws_instance.myapp-server
+# aws_internet_gateway.myapp-igw
+# aws_subnet.myapp-subnet-1
+# aws_vpc.myapp-vpc
 ```
 
 </details>
