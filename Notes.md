@@ -1856,10 +1856,10 @@ terraform state list
 <br />
 
 ### CI/CD with Terraform
-Instead of manually create en EC2 instance before running the Jenkins pipeline to build an application and deploy it on the EC2 instance, we want to integrate Terraform into the build pipeline and provision the EC2 server as part of the build pipeline.
+Instead of manually creating an EC2 instance before running the Jenkins pipeline to build an application and deploy it on this EC2 instance, we want to integrate Terraform into the build pipeline and provision the EC2 server as part of the build pipeline.
 
-In order to do so we need to
-- create a key-pair,
+In order to do so, we need to
+- create a key-pair to be used by Jenkins to ssh/scp into the EC2 instance,
 - install Terraform inside the Jenkins container
 - add Terraform configuration files to the project
 - adjust the Jenkinsfile.
@@ -1873,7 +1873,7 @@ In order to do so we need to
 <br />
 
 ### Create SSH Key-Pair
-Login to your AWS Management Console and navigate to the EC2 dashboard. Click the "Key pairs" link and press "Create key pair". Enter a name (e.g. myapp-key-pair), select the type ED25519 and the format .pem and press "Create key pair". A `myapp-key-pair.pem` file containing the private key is automatically downloaded. (The public key is stored in AWS.)
+Login to your AWS Management Console and navigate to the EC2 dashboard. Click the "Key pairs" link and press "Create key pair". Enter a name (e.g. myapp-key-pair), select the type ED25519 and the format .pem and press "Create key pair". A `myapp-key-pair.pem` file containing the private key is automatically downloaded. The public key is stored in AWS. When we create an EC2 instance with Terraform, we can associate the `myapp-key-pair` key in AWS with this instance.
 
 Now we have to store this private key on Jenkins server. First move the .pem file from the download folder to the ssh folder and copy its content to the clipboard:
 
@@ -1884,22 +1884,24 @@ pbcopy < ~/.ssh/myapp-key-pair.pem
 
 Now login to your Jenkins server and open the multibranch pipeline project for the java-maven-app (Dashboard > devops-bootcamp-multibranch-pipeline). Click on Credentials > Store devops-bootcamp-multibranch-pipeline > Global credentials (unrestricted) and press "+ Add Credentials". Select the kind "SSH Username with private key", enter an ID (e.g. server-ssh-key), the username is 'ec2-user', select Private Key > Enter directly, press Key > Add, paste the private key from the clipboard and press "Create".
 
-Now we can assiciate the `myapp-key-pair` key in AWS with an EC2 instance when we create it with Terraform.
-
 ### Install Terraform inside Jenkins Container
-To install Terraform inside Jenkins container we have to ssh into the Droplet running the Jenkins container and enter the container:
+To install Terraform inside Jenkins container we have to ssh into the Droplet running the Jenkins container, enter the Jenkins container and execute the following commands:
 
 ```sh
+# SSH into the Droplet running the Jenkins container
 ssh root@<jenkins-droplet-ip>
 # => root@jenkins-server:~#
 
+# get the Jenkins container ID
 docker ps
 # CONTAINER ID   IMAGE                 COMMAND                  CREATED        STATUS       PORTS                                                                                      NAMES
 # 54ae5b80a7c8   jenkins/jenkins:lts   "/usr/bin/tini -- /u…"   2 months ago   Up 2 weeks   0.0.0.0:8080->8080/tcp, :::8080->8080/tcp, 0.0.0.0:50000->50000/tcp, :::50000->50000/tcp   nervous_euler
 
+# enter the Jenkins container
 docker exec -it -u 0 54ae5b80a7c8 bash
 # => root@54ae5b80a7c8:/#
 
+# find out which Linux distribution is running
 cat /etc/os-release
 # PRETTY_NAME="Debian GNU/Linux 11 (bullseye)"
 # NAME="Debian GNU/Linux"
@@ -1913,14 +1915,15 @@ cat /etc/os-release
 
 # find the installation instructions for Linux Debian on 'https://developer.hashicorp.com/terraform/tutorials/aws-get-started/install-cli'
 
+# install needed tools
 apt-get update && apt-get install -y gnupg software-properties-common wget
 
-# Install the HashiCorp GPG key
+# install the HashiCorp GPG key
 wget -O- https://apt.releases.hashicorp.com/gpg | \
 gpg --dearmor | \
 tee /usr/share/keyrings/hashicorp-archive-keyring.gpg
 
-# Verify the key's fingerprint
+# verify the key's fingerprint
 gpg --no-default-keyring \
 --keyring /usr/share/keyrings/hashicorp-archive-keyring.gpg \
 --fingerprint
@@ -1931,25 +1934,25 @@ gpg --no-default-keyring \
 # uid           [ unknown] HashiCorp Security (HashiCorp Package Signing) <security+packaging@hashicorp.com>
 # sub   rsa4096 2023-01-10 [S] [expires: 2028-01-09]
 
-# Add the official HashiCorp repository to your system
+# add the official HashiCorp repository to your system
 echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] \
 https://apt.releases.hashicorp.com $(lsb_release -cs) main" | \
 tee /etc/apt/sources.list.d/hashicorp.list
 
-# Download the package information from HashiCorp
+# download the package information from HashiCorp
 apt update
 
-# Install Terraform from the new repository
+# install Terraform from the new repository
 apt-get install terraform
 
-# Check
+# check
 terraform -v
 # Terraform v1.4.6
 # on linux_amd64
 ```
 
 ### Terraform Configuration Files
-Now we have to add Terraform configuration files to the java-maven-app project repository. Open the project and create a new branch called `sshagent-terraform`. Create `terraform` folder containing a `main.tf` file and copy the content of the configuration file created in video 12-14 (or in demo project #1) to this `main.tf` file. We can remove the resource "aws_key_pair.ssh-key" because we manually created a key-pair. In the resource "aws_instance.myapp-server" we replace the "key_name" attribute value `aws_key_pair.ssh-key.key_name` (referencing the deleted resource) with the hardcoded name of the manually created key-pair (`"myapp-key-pair"`). We also delete the varaible `public_key_location`.
+Now we have to add Terraform configuration files to the java-maven-app project repository. Open the project and create a new branch called `sshagent-terraform`. Create a `terraform` folder containing a `main.tf` file and copy the content of the configuration file created in video 12-14 (or in demo project #1) to this `main.tf` file. We can remove the resource "aws_key_pair.ssh-key" because we manually created a key-pair. In the resource "aws_instance.myapp-server" we replace the "key_name" attribute value `aws_key_pair.ssh-key.key_name` (referencing the deleted resource) with the hardcoded name of the manually created key-pair (`"myapp-key-pair"`). We also delete the variable `public_key_location`.
 
 Since we do not check in the `terraform.tfvars` file, we have to find another way of providing the variable values for the Jenkins pipeline. An easy way is to define default values for all the variables. So lets move all the variables from the `main.tf` file into their own separate file `variables.tf`. And instead of just defining the variable names, we now also define a default value for each variable. We end up with a `variables.tf` file with the following content:
 
@@ -2185,7 +2188,7 @@ sshagent(['server-ssh-key']) {
 
 Note that we also switched to the new key-pair name 'server-ss-key'.
 
-Another problem is that when the EC2 isntance is created, the `terraform apply` command returns and the "Provision Server" stage is done. However, the EC2 instance has not been initialized yet. The commands in `entry-script.sh` are still being executed. This means that docker-compose might not be available when the "Deploy Application" stage starts. The easiest way to solve this issue is to pause the pipeline execution for a certain duration until we can expect the initialization process to have finished. Let's add the following commands to the beginning of the script in the "Deploy Application" stage:
+Another problem is that when the EC2 instance is created, the `terraform apply` command returns and the "Provision Server" stage is done. However, the EC2 instance has not been initialized yet. The commands in `entry-script.sh` are still being executed. This means that docker-compose might not be available when the "Deploy Application" stage starts. The easiest way to solve this issue is to pause the pipeline execution for a certain duration until we can expect the initialization process to have finished. Let's add the following commands to the beginning of the script in the "Deploy Application" stage:
 
 ```groovy
 echo "waiting for EC2 server to initialize" 
@@ -2269,6 +2272,8 @@ After the build finished check the logs to get the IP address of the newly provi
 chmod 400 ~/.ssh/myapp-key-pair.pem
 ssh -i ~/.ssh/myapp-key-pair.pem ec2-user@<ip-address-copied-from-jenkins-log>
 docker ps
+# CONTAINER ID   IMAGE                                                         COMMAND                  CREATED          STATUS          PORTS                                       NAMES
+# 459bc9f7af12   fsiegrist/fesi-repo:devops-bootcamp-java-maven-app-1.0.57-7   "/bin/sh -c 'java -j…"   53 seconds ago   Up 52 seconds   0.0.0.0:8000->8080/tcp, :::8000->8080/tcp   ec2-user-java-maven-app-1
 ```
 
 Open the browser and navigate to 'http://<ip-address-copied-from-jenkins-log>:8000' to see the java-maven-app in action.
