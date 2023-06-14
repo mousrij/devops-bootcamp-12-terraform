@@ -2347,3 +2347,27 @@ terraform state list # <-- connects to the s3 bucket and reads the current state
 </details>
 
 *****
+
+<details>
+<summary>Video: 26 - Terraform Best Practices</summary>
+<br />
+
+### Best Practices Around Terraform State
+- Manipulate state only through TF commands, don't manually change the state file
+- Always set up a shared remote state instead of on your laptop or in Git
+- Use state locking (locks state file until writing of state file is completed); be aware that not all remote backends support locking
+- Back up your state file and enable versioning (allows for state recovery)
+- Use 1 state per environment
+
+### Other Best Practices
+- Host TF scripts in Git repository
+- CI for TF code (review TF code, run automated tests)
+- Apply TF ONLY through CD pipeline (instead of manually)
+- Use _ (underscore) instead of - (dash) in all resource names, data source names, variable names, outputs etc.
+- Only use lowercase letters and numbers
+- Use a consistent structure and naming convention
+- Don’t hardcode values as much as possible - pass as variables or use data sources to get a value
+
+</details>
+
+*****
