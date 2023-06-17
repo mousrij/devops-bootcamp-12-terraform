@@ -1,0 +1,33 @@
+#!/usr/bin/env groovy
+
+pipeline {
+    agent any
+    environment {
+        AWS_ACCESS_KEY_ID = credentials('jenkins-aws_access_key_id')
+        AWS_SECRET_ACCESS_KEY = credentials('jenkins-aws_secret_access_key')
+    }
+    stages {
+        stage('provision cluster') {
+            environment {
+                TF_VAR_env_prefix = "dev"
+                TF_VAR_k8s_version = "1.27"
+                TF_VAR_cluster_name = "module12-exercise-cluster"
+                TF_VAR_region = "eu-central-1"
+            }
+            steps {
+                script {
+                    echo "creating EKS cluster"
+                    sh "terraform init"
+                    sh "terraform apply --auto-approve"
+                    
+                    env.EKS_CLUSTER_ENDPOINT = sh(
+                        script: "terraform output cluster_endpoint",
+                        returnStdout: true
+                    ).trim()
+                    
+                    echo "Cluster URL: ${env.EKS_CLUSTER_ENDPOINT}"
+                }
+            }
+        }
+    }
+}
