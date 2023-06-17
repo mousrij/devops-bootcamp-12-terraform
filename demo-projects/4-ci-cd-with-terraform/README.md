@@ -119,7 +119,7 @@ Now we have to add Terraform configuration files to the java-maven-app project r
 - Create a `terraform` folder containing a `main.tf` file with the following content (we reuse the file of demo project #1 and adjust it where necessary):
   ```conf
   terraform {
-    equired_providers {
+    required_providers {
       aws = {
         source = "hashicorp/aws"
         version = "4.67.0"

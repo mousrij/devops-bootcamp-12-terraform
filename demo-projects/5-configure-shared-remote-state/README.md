@@ -11,7 +11,7 @@ Configure a Shared Remote State
 - Configure Amazon S3 as remote storage for Terraform state
 
 #### Steps to configure Amazon S3 as remote storage for Terraform state
-Inside the Terraform configuration file we add a `backend` attribute to the `terraform` block h defining the remote AWS S3 state storage:
+Inside the Terraform configuration file we add a `backend` attribute to the `terraform` block defining the remote AWS S3 state storage:
 
 ```conf
 terraform {
@@ -79,3 +79,5 @@ terraform destroy --auto-approve
 terraform state list
 # ---
 ```
+
+Also remove the S3 bucket. This has to be done via the AWS Management Console. You first have to empty it before you can delete it.
