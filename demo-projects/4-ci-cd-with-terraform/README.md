@@ -276,7 +276,7 @@ Now we have to add Terraform configuration files to the java-maven-app project r
   ```
 
 #### Steps to add a “provision” stage to the CI/CD pipeline that provisions an EC2 instance
-Now we can add a stage to the pipeline which provisions an EC2 instance by executing terraform commands. Add the following stage definition to the Jenkinsfile right after the "Build and Publisch Docker Image" stage:
+Now we can add a stage to the pipeline which provisions an EC2 instance by executing terraform commands. Add the following stage definition to the Jenkinsfile right after the "Build and Publish Docker Image" stage:
 
 ```groovy
 stage('Provision Server') {
