@@ -1035,6 +1035,12 @@ resource "aws_instance" "myapp-server" {
     ...
 }
 ```
+To create new ssh key with the convenient technique:
+
+```sh
+ssh-keygen -t rsa -b 4096 -C "your_email@example.com"
+
+```
 
 Don't forget to set the `public_key_location` variable:
 
