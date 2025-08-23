@@ -1620,13 +1620,13 @@ module "vpc" {
   }
 }
 ```
-> cloud load balancer is actually an entry point to the cluster should be accessible from outside
-> and LB gets an external ip address so that we communicate from outside 
-> public one allow communication with internet 
-> private is close denying external requests
-> and k8s need to know which one public or private 
+> cloud load balancer is actually an entry point to the cluster should be accessible from outside.
+> and LB gets an external ip address so that we communicate from outside.
+> public one allow communication with internet.
+> private is close denying external requests.
+> and k8s need to know which one public or private.
 ---
-> remember this is for the aws cloud controller manager responsiblity (mastre process)
+> remember this is for the aws cloud controller manager responsiblity (mastre process).
 
 <br/>
 <img src="./img/image copy.png" >
@@ -1634,12 +1634,9 @@ module "vpc" {
 
 _terraform/terraform.tfvars_
 ```conf
-vpc_cidr_block
-private_subnet_cidr_blocks
-public_subnet_cidr_blocks
-
-
-
+vpc_cidr_block = "10.0.0.0/16"
+private_subnet_cidr_blocks = ["10.0.1.0/24", "10.0.2.0/24", "10.0.3.0/24"]
+public_subnet_cidr_blocks = ["10.0.4.0/24", "10.0.5.0/24", "10.0.6.0/24"]
 ```
 
 
