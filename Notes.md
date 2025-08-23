@@ -1286,7 +1286,8 @@ touch modules/subnet/main.tf
 touch modules/subnet/variables.tf
 touch modules/subnet/outputs.tf
 ```
-
+the hierarchical folder architechture 
+<img src="/img/image.png" />
 This is the structure of modules in Terraform. Child modules are referenced by another module
 on a higher level.
 
