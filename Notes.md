@@ -1585,14 +1585,26 @@ module "vpc" {
   # Best practice for configuring subnets for an EKS cluster: configure one private and one public subnet in each availability zone of the current region.
   private_subnets = var.private_subnet_cidr_blocks
   public_subnets = var.public_subnet_cidr_blocks
-  azs = data.aws_availability_zones.available.names 
+  azs = data.aws_availability_zones.available.names  # ['eu-north-1a', eu-north-1b, eu-north-1c]
   
   enable_nat_gateway = true
   single_nat_gateway = true  # all private subnets will route their internet traffic through this single NAT gateway
   enable_dns_hostnames = true
 
+  #-------------------------------------------------------------------------------------------------------
+  # when creating eks cluster : specifecally there is a process called : _ *control plan* —>
+
+  # cloud controller manager comes from aws : orchestrate connecting to 
+
+  # -vpc
+  # -subnets
+  # -worker node
+  # -other resources …
+  #
+  #don't forget to label the resources for the ccm ;eks process
+  #--------------------------------------------------------------------------------------------------------
   tags = {
-    "kubernetes.io/cluster/myapp-eks-cluster" = "shared"  # for AWS Cloud Control Manager (it needs to know which VPC it should connect to)
+    "kubernetes.io/cluster/myapp-eks-cluster" = "shared"  # for AWS Cloud Control Manager (it needs to know the name of the eks cluster)
   }
 
   public_subnet_tags = {
@@ -1602,10 +1614,34 @@ module "vpc" {
 
   private_subnet_tags = {
     "kubernetes.io/cluster/myapp-eks-cluster" = "shared"
-    "kubernetes.io/role/internal-elb" = 1 
+    "kubernetes.io/role/internal-elb" = 1       # ()
+    
+    #<--------->image below
   }
 }
 ```
+> cloud load balancer is actually an entry point to the cluster should be accessible from outside
+> and LB gets an external ip address so that we communicate from outside 
+> public one allow communication with internet 
+> private is close denying external requests
+> and k8s need to know which one public or private 
+---
+> remember this is for the aws cloud controller manager responsiblity (mastre process)
+
+<br/>
+<img src="./img/image copy.png" >
+<br/>
+
+_terraform/terraform.tfvars_
+```conf
+vpc_cidr_block
+private_subnet_cidr_blocks
+public_subnet_cidr_blocks
+
+
+
+```
+
 
 Now we can initialize the Terraform project and validate it to see if our configuration is syntactically correct so far:
 
@@ -1659,6 +1695,7 @@ terraform plan
 ```
 
 Everything seems to be ok. But before we apply it, we need to create the EKS and other resources (see next video).
+<br><img src="./img/image copy 2.png"><br>
 
 </details>
 
