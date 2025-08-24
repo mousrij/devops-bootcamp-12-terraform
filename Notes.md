@@ -1907,6 +1907,7 @@ terraform apply --auto-approve
 
 #### Notes
 <details>
+<summary>TLS (cluster CA cert) and the token (authentication)</summary>
 Good catch 👌 let’s separate the roles of **TLS (cluster CA cert)** and **the token (authentication)**, because they serve **different purposes**:
 
 ---
