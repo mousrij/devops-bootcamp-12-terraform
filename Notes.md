@@ -1783,12 +1783,12 @@ provider "kubernetes" {
 }
 
 data "aws_eks_cluster" "my_app_cluster" {
-  name = module.eks.cluster_ip          # filter search criteria--> look in the registery module
+  name = module.eks.cluster_id          # filter search criteria--> look in the registery module
 }
 
 #2nd data form_ it return an object 
 data "aws_eks_cluster_auth" "my_app_cluster" {
-  name = module.eks.cluster_ip
+  name = module.eks.cluster_id
 }
 ```
 ---
