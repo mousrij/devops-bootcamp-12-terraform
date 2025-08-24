@@ -1905,6 +1905,60 @@ terraform apply --auto-approve
 # Apply complete! Resources: 55 added, 0 changed, 0 destroyed.
 ```
 
+#### Notes
+<details>
+Good catch 👌 let’s separate the roles of **TLS (cluster CA cert)** and **the token (authentication)**, because they serve **different purposes**:
+
+---
+
+### 🔹 1. `cluster_ca_certificate` → Trust the server’s identity
+
+* When you connect to the EKS API server (`https://<endpoint>`), Terraform (via the Kubernetes provider) first needs to **establish a TLS connection**.
+* TLS requires verifying the **server certificate** (to ensure you’re really talking to your EKS API server, and not some fake server doing a man-in-the-middle attack).
+* That’s why we pass the **cluster CA certificate**: it’s the root of trust that validates the API server’s certificate.
+
+👉 This guarantees **encryption** and **server authenticity**.
+But at this point, the server still doesn’t know **who you are**.
+
+---
+
+### 🔹 2. `token` (IAM auth) → Prove your identity
+
+* Once TLS is established, the API server asks:
+
+  > “Okay, I know you’re talking to me securely. But **who are you**? And are you allowed to do what you’re asking?”
+* That’s where the **token** comes in.
+* In EKS, authentication to the Kubernetes API is based on **AWS IAM**:
+
+  * You call `aws eks get-token` (or `data.aws_eks_cluster_auth`)
+  * This gives you a **short-lived authentication token** signed by AWS STS
+  * The Kubernetes API server validates this token against IAM
+
+👉 This proves **your identity** (e.g., `arn:aws:iam::1234567890:user/Hamza`) and lets RBAC in Kubernetes decide what permissions you have.
+
+---
+
+### 🔑 Putting it together
+
+* **TLS cert** = “I trust that I’m talking to the real EKS API server.”
+* **Token** = “Here’s my IAM identity, please let me in.”
+
+Without the CA cert → you might connect to an imposter server.
+Without the token → the server rejects you with `401 Unauthorized`.
+
+---
+
+💡 Analogy:
+
+* TLS cert = checking someone’s **passport** → proves the server is genuine.
+* Token = showing your **boarding pass** → proves *you* are authorized to enter the plane.
+
+---
+
+Do you want me to also explain **why EKS uses tokens instead of static passwords/kubeconfig** (and how this maps to AWS IAM → Kubernetes RBAC)?
+
+</details>
+
 </details>
 
 *****
