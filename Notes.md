@@ -1791,6 +1791,35 @@ data "aws_eks_cluster_auth" "my_app_cluster" {
   name = module.eks.cluster_ip
 }
 ```
+---
+### 2. Alternative Using exec Block (Compatible with Older Terraform Versions)
+A widely-used alternative configuration—especially when ephemeral values aren't supported—is using the Kubernetes provider's exec block to dynamically call the AWS CLI for authentication:
+
+```hcl
+provider "kubernetes" {
+  host                   = aws_eks_cluster.my_cluster.endpoint
+  cluster_ca_certificate = base64decode(aws_eks_cluster.my_cluster.certificate_authority[0].data)
+
+  exec {
+    api_version = "client.authentication.k8s.io/v1beta1"
+    command     = "aws"
+    args        = ["eks", "get-token", "--cluster-name", aws_eks_cluster.my_cluster.name]
+  }
+}
+data "aws_eks_cluster" "eks" {
+  name = module.eks.cluster_name
+}
+
+ephemeral "aws_eks_cluster_auth" "eks" {
+  name = module.eks.cluster_name
+}
+```
+
+Benefits:
+  * No token is stored in the Terraform state.
+  * You get a fresh authentication token each time you apply.
+  * Works with existing Terraform versions and avoids sensitive data leakage.
+
 
 ---
 ### Apply the Configuration Files
