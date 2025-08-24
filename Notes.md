@@ -1537,7 +1537,7 @@ terraform apply --auto-aprove
 <details>
 <summary>Video: 19 - Automate Provisioning EKS cluster with Terraform - Part 1</summary>
 <br />
-[documentation sur provisionment sans modules](https://dev.to/aws-builders/navigating-aws-eks-with-terraform-understanding-vpc-essentials-for-eks-cluster-management-51e3)
+![documentation sur provisionment sans modules](https://dev.to/aws-builders/navigating-aws-eks-with-terraform-understanding-vpc-essentials-for-eks-cluster-management-51e3),<br>
 Until now we created an EKS cluster manually on the AWS Management Console and then using the command line tool `eksctl`. But either way was rather complex because there are quite a few compontents to be created and configured. And we don't have a history of what we did (e.g. in a version control system), a simple replication of the infrastructure in another environment isn't possible, the collaboration in a team is difficult (if many developers are working on the configuration of the cluster) and finally there is no simple way of cleaning up the whole cluster when we don't need it anymore.
 
 All these aspects make provisioning an EKS cluster using Terraform the currently best and most efficient way to do so.
