@@ -1795,6 +1795,20 @@ data "aws_eks_cluster_auth" "my_app_cluster" {
 ### 2. Alternative Using exec Block (Compatible with Older Terraform Versions)
 A widely-used alternative configuration—especially when ephemeral values aren't supported—is using the Kubernetes provider's exec block to dynamically call the AWS CLI for authentication:
 
+> 🔹 Why all this configuration?
+
+The Kubernetes API server requires three things to trust Terraform:
+```note
+host → API server endpoint (EKS gives you this URL)
+cluster_ca_certificate → Cluster’s CA certificate to establish TLS trust
+token/credentials → How Terraform authenticates (temporary AWS IAM token via aws eks get-token)
+
+Since Terraform has no magic way of guessing this info, you fetch it using:
+
+data "aws_eks_cluster" → cluster metadata (endpoint, CA cert)
+data "aws_eks_cluster_auth" → authentication token
+``` 
+
 ```hcl
 provider "kubernetes" {
   host                   = aws_eks_cluster.my_cluster.endpoint
