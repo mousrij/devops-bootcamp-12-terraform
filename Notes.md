@@ -1748,7 +1748,51 @@ module "eks" {
   }
 }
 ```
+---
+<br/>
+<img src="./img/image copy 3.png">
 
+### Process of authentication in kubernetes
+
+[Doc](https://registry.terraform.io/providers/hashicorp/kubernetes/latest/docs)
+So once the cluster is created, it needs to authenticate with master process of k8s, so we need to configure the provider.
+
+The Kubernetes provider can get its configuration in two ways:
+
+1-Explicitly by supplying attributes to the provider block. This includes:
+  -  Using a kubeconfig file
+  -  Supplying credentials
+  -  Exec plugins
+2-Implicitly through environment variables. This includes:
+  -  Using the in-cluster config
+
+> so we opt for the 1st one : 
+
+_terraform/eks-cluster.tf_
+```conf
+provider "kubernetes" {
+  load_config_file = "false"  # to not read again the same file 
+  # we need to configure provider with the endpoint of the cluster ; this going to be the api server address endpoint.
+  # so we query the data using data
+  host = data.aws_eks_cluster.my_app_cluster.endpoint
+
+  # this time we need the token data from aws eks cluster 
+  token = data.aws_eks_cluster.my_app_cluster.token
+  cluster_ca_certificate = base64decode(data.aws_eks_cluster.my_app_cluster.certificate.0.data)
+
+}
+
+data "aws_eks_cluster" "my_app_cluster" {
+  name = module.eks.cluster_ip          # filter search criteria--> look in the registery module
+}
+
+#2nd data form_ it return an object 
+data "aws_eks_cluster_auth" "my_app_cluster" {
+  name = module.eks.cluster_ip
+}
+```
+
+---
 ### Apply the Configuration Files
 Because we added a new module, we have to execute `terraform init` again.
 
